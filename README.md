@@ -52,3 +52,4 @@ This will download the components into the `managed_components` directory of you
 ## Requirements
 
 - ESP-IDF v5.5 or later.
+- Target: ESP32 (Linux simulator not supported)
