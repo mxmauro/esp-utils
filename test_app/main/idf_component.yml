@@ -1,0 +1,6 @@
+description: 'Test app for the esp-utils library'
+dependencies:
+  idf: '>=5.5.0'
+  mxmauro/esp-utils:
+    version: '*'
+    override_path: '../../'

@@ -1,0 +1,11 @@
+version: 0.1.0
+description: Utility Library for ESP-IDF
+url: https://github.com/mxmauro/esp-utils
+repository: https://github.com/mxmauro/esp-utils.git
+license: MIT
+issues: https://github.com/mxmauro/esp-utils/issues
+maintainers:
+  - "Mauro H. Leggieri"
+dependencies:
+  idf:
+    version: '>=5.5.0'
