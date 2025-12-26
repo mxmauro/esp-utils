@@ -1,10 +1,6 @@
 # esp-utils
 
-A lightweight ESP-IDF component library providing essential utilities for embedded IoT applications.
-
-## Overview
-
-`esp-utils` is a collection of reusable C++ utilities designed for ESP32 microcontrollers. It provides abstractions for common tasks including hardware control, data structures, synchronization primitives, and storage management.
+`esp-utils` is a reusable [ESP-IDF](https://github.com/espressif/esp-idf) component that provides abstractions for common tasks including hardware control, data structures, synchronization primitives, and storage management.
 
 ## Features
 
@@ -33,7 +29,26 @@ A lightweight ESP-IDF component library providing essential utilities for embedd
 | `lightstd`           | Lightweight standard library alternatives (allocators, containers) |
 | `mini_profiler`      | Simple performance profiling utilities                             |
 
+## Installation
+
+Open your project's `idf_component.yml` file and add the `dependencies` section if not present.
+Then append the desired component like the following example:
+
+```yaml
+dependencies:
+  mxmauro/esp_utils:
+    git: https://github.com/mxmauro/esp-utils.git
+    version: "*"   # You can also specify a tag, branch or commit hash
+```
+
+Save the changes and run the following command:
+
+```bash
+idf.py reconfigure   # or idf.py build
+```
+
+This will download the components into the `managed_components` directory of your project.
+
 ## Requirements
 
-- ESP-IDF v5.5 or later
-- Target: ESP32 (Linux simulator not supported)
+- ESP-IDF v5.5 or later.
