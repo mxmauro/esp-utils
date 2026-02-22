@@ -1,5 +1,4 @@
 #include "task.h"
-#include <esp_err.h>
 #include <esp_log.h>
 #include <string.h>
 
@@ -30,8 +29,8 @@ void taskInit(Task_t *task)
     memset(&task->eventGroupBuffer, 0, sizeof(task->eventGroupBuffer));
 }
 
-bool taskCreate(Task_t *task, TaskRoutine_t fn, const char *pcName, uint32_t usStackDepth,
-                void *pvParameters, UBaseType_t uxPriority, BaseType_t xCoreID)
+esp_err_t taskCreate(Task_t *task, TaskRoutine_t fn, const char *pcName, uint32_t usStackDepth,
+                     void *pvParameters, UBaseType_t uxPriority, BaseType_t xCoreID)
 {
     InternalTaskData_t data = {
         .task = task,
@@ -40,20 +39,24 @@ bool taskCreate(Task_t *task, TaskRoutine_t fn, const char *pcName, uint32_t usS
     };
     TaskHandle_t h;
 
+    if ((!fn) || (!pcName) || *pcName == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
     runOnceInit(&task->once);
     task->eg = xEventGroupCreateStatic(&(task->eventGroupBuffer));
 
     if (xTaskCreatePinnedToCore(&taskRoutine, pcName, usStackDepth, &data, uxPriority, &h, xCoreID) != pdPASS) {
         vEventGroupDelete(task->eg);
         task->eg = nullptr;
-        return false;
+        return ESP_FAIL;
     }
 
     // Wait for the continue flag
     xEventGroupWaitBits(task->eg, SIGNAL_BIT_CONTINUE, pdFALSE, pdTRUE, portMAX_DELAY);
 
     // Done
-    return true;
+    return ESP_OK;
 }
 
 void taskSignalContinue(Task_t *task)

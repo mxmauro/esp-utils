@@ -1,6 +1,7 @@
 #pragma once
 
 #include "run_once.h"
+#include <esp_err.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/event_groups.h>
@@ -27,8 +28,8 @@ extern "C" {
 void taskInit(Task_t *task);
 
 // Creates a new task and waits until the continue event is signalled.
-bool taskCreate(Task_t *task, TaskRoutine_t fn, const char *pcName, uint32_t usStackDepth,
-                void * pvParameters, UBaseType_t uxPriority, BaseType_t xCoreID);
+esp_err_t taskCreate(Task_t *task, TaskRoutine_t fn, const char *pcName, uint32_t usStackDepth,
+                     void * pvParameters, UBaseType_t uxPriority, BaseType_t xCoreID);
 
 // Call this function after the task copies the given parameters
 void taskSignalContinue(Task_t *task);
