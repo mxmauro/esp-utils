@@ -10,20 +10,24 @@
 
 void runOnceInit(RunOnce_t *once)
 {
-    once->store(0);
+    atomic_store_explicit(once, RUN_ONCE_NOT_STARTED, memory_order_relaxed);
 }
 
-void runOnce(RunOnce_t *once, RunOnceCallback_t cb, const void *arg)
+void runOnce(RunOnce_t *once, RunOnceCallback_t cb, void *ctx)
 {
     uint32_t expected = RUN_ONCE_NOT_STARTED;
-    if (once->compare_exchange_strong(expected, RUN_ONCE_RUNNING)) {
-        cb(arg);
-        once->store(RUN_ONCE_FINISHED);
+
+    if (atomic_compare_exchange_strong_explicit(once, &expected, RUN_ONCE_RUNNING,
+                                                memory_order_acq_rel, memory_order_acquire))
+    {
+
+        cb(ctx);
+        atomic_store_explicit(once, RUN_ONCE_FINISHED, memory_order_release);
     }
     else if (expected == RUN_ONCE_RUNNING) {
         // If running, spin until done
-        while (once->load() != RUN_ONCE_FINISHED) {
-            vTaskDelay(100 / portTICK_PERIOD_MS);
+        while (atomic_load_explicit(once, memory_order_acquire) != RUN_ONCE_FINISHED) {
+            vTaskDelay(pdMS_TO_TICKS(100));
         }
     }
 }

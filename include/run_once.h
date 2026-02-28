@@ -1,14 +1,14 @@
 #pragma once
 
-#include <atomic>
+#include <stdatomic.h>
 #include <stdint.h>
 
 // -----------------------------------------------------------------------------
 
 // RunOnce provides a mechanism to ensure a callback is executed only once.
-typedef std::atomic_uint32_t RunOnce_t;
+typedef _Atomic(uint32_t) RunOnce_t;
 
-typedef void (*RunOnceCallback_t)(const void *arg);
+typedef void (*RunOnceCallback_t)(void *ctx);
 
 #define RUN_ONCE_INIT_STATIC 0
 
@@ -19,7 +19,7 @@ extern "C" {
 #endif // __cplusplus
 
 void runOnceInit(RunOnce_t *once);
-void runOnce(RunOnce_t *once, RunOnceCallback_t cb, const void *arg);
+void runOnce(RunOnce_t *once, RunOnceCallback_t cb, void *ctx);
 
 #ifdef __cplusplus
 }

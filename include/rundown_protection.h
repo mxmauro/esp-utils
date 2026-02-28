@@ -1,8 +1,8 @@
 #pragma once
 
-#include <atomic>
 #include <freertos/FreeRTOS.h>
 #include <freertos/event_groups.h>
+#include <stdatomic.h>
 #include <stdint.h>
 
 // -----------------------------------------------------------------------------
@@ -12,7 +12,7 @@
 // your app to safely coordinate between threads that access shared state and
 // code paths that may tear down that state (e.g., during unload).
 typedef struct RundownProtection_s {
-    std::atomic_uint32_t counter;
+    _Atomic(uint32_t) counter;
     EventGroupHandle_t eg;
     StaticEventGroup_t eventGroupBuffer;
 } RundownProtection_t;
@@ -43,19 +43,23 @@ void rundownProtWait(RundownProtection_t *rp);
 class AutoRundownProtection
 {
 public:
-    AutoRundownProtection(RundownProtection_t *_rp)
-        {
-            rp = _rp;
-            wasAcquired = rundownProtAcquire(rp);
-        };
+    AutoRundownProtection(RundownProtection_t &_rp) : rp(_rp)
+    {
+        wasAcquired = rundownProtAcquire(&rp);
+    }
+    AutoRundownProtection(const AutoRundownProtection&) = delete;
+    AutoRundownProtection(AutoRundownProtection&&) = delete;
 
     ~AutoRundownProtection()
+    {
+        if (wasAcquired)
         {
-            if (wasAcquired)
-            {
-                rundownProtRelease(rp);
-            }
-        };
+            rundownProtRelease(&rp);
+        }
+    }
+
+    AutoRundownProtection& operator=(const AutoRundownProtection&) = delete;
+    AutoRundownProtection& operator=(AutoRundownProtection&&) = delete;
 
     bool acquired() const
         {
@@ -63,7 +67,7 @@ public:
         };
 
 private:
-    RundownProtection_t *rp;
+    RundownProtection_t &rp;
     bool wasAcquired;
 };
 #endif // __cplusplus

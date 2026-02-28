@@ -1,13 +1,16 @@
 #include "rundown_protection.h"
+#include <assert.h>
 #include <string.h>
 
 #define RUNDOWN_IS_ACTIVE 0x80000000UL
+#define RUNDOWN_REF_MASK  (~RUNDOWN_IS_ACTIVE)
+#define RUNDOWN_DONE_BIT  1u
 
 // -----------------------------------------------------------------------------
 
 void rundownProtInit(RundownProtection_t *rp)
 {
-    rp->counter.store(0);
+    atomic_store_explicit(&rp->counter, 0, memory_order_relaxed);
     rp->eg = xEventGroupCreateStatic(&(rp->eventGroupBuffer));
 }
 
@@ -18,23 +21,28 @@ void rundownProtDestroy(RundownProtection_t *rp)
         rp->eg = nullptr;
         memset(&rp->eventGroupBuffer, 0, sizeof(rp->eventGroupBuffer));
     }
-    rp->counter.store(0);
+    atomic_store_explicit(&rp->counter, 0, memory_order_relaxed);
 }
 
 bool rundownProtAcquire(RundownProtection_t *rp)
 {
-    uint32_t val;
+    uint32_t val, desired;
 
+    val = atomic_load_explicit(&rp->counter, memory_order_acquire);
     for (;;) {
-        val = rp->counter.load();
-
         // If a rundown is in progress, cancel acquisition
         if (val & RUNDOWN_IS_ACTIVE) {
             return false;
         }
+        if ((val & RUNDOWN_REF_MASK) == RUNDOWN_REF_MASK) {
+            return false; // overflow guard
+        }
 
         // Try to increment the reference counter
-        if (rp->counter.compare_exchange_strong(val, val+1)) {
+        desired = val + 1;
+        if (atomic_compare_exchange_strong_explicit(&rp->counter, &val, desired,
+                                                    memory_order_acquire, memory_order_acquire))
+        {
             return true;
         }
     }
@@ -42,18 +50,25 @@ bool rundownProtAcquire(RundownProtection_t *rp)
 
 void rundownProtRelease(RundownProtection_t *rp)
 {
-    uint32_t val, newVal;
+    uint32_t val, desired, ref;
 
+    val = atomic_load_explicit(&rp->counter, memory_order_acquire);
     for (;;) {
+        ref = val & RUNDOWN_REF_MASK;
+        if (ref == 0) {
+            assert(false); // assert / error: release without acquire
+            return;
+        }
+
         // Decrement usage counter but keep the rundown active flag if present
-        val = rp->counter.load();
+        desired  = (val & RUNDOWN_IS_ACTIVE) | (ref - 1);
 
-        newVal = (val & RUNDOWN_IS_ACTIVE) | ((val & (~RUNDOWN_IS_ACTIVE)) - 1);
-
-        if (rp->counter.compare_exchange_strong(val, newVal)) {
+        if (atomic_compare_exchange_strong_explicit(&rp->counter, &val, desired,
+                                                    memory_order_release, memory_order_acquire))
+        {
             // If a wait is in progress and the last reference is being released, complete the wait
-            if (newVal == RUNDOWN_IS_ACTIVE) {
-                xEventGroupSetBits(rp->eg, 1);
+            if (desired == RUNDOWN_IS_ACTIVE) {
+                xEventGroupSetBits(rp->eg, RUNDOWN_DONE_BIT);
             }
             break;
         }
@@ -62,34 +77,38 @@ void rundownProtRelease(RundownProtection_t *rp)
 
 void rundownProtWait(RundownProtection_t *rp)
 {
-    uint32_t val;
+    uint32_t val, desired, isActive;
 
+    // Get rundown active flag
+    val = atomic_load_explicit(&rp->counter, memory_order_acquire);
     for (;;) {
-        // Get rundown active flag
-        val = rp->counter.load();
+        isActive = val & RUNDOWN_IS_ACTIVE;
 
         // Check if wait was already called (concurrent waits are also allowed)
-        if (val & RUNDOWN_IS_ACTIVE) {
+        if (isActive) {
             // Wait until rundown completes
-            xEventGroupWaitBits(rp->eg, 1, pdFALSE, pdTRUE, portMAX_DELAY);
+            xEventGroupWaitBits(rp->eg, RUNDOWN_DONE_BIT, pdFALSE, pdTRUE, portMAX_DELAY);
 
             // Done
-            break;
+            return;
         }
 
         // Set rundown active flag
-        if (rp->counter.compare_exchange_strong(val, val | RUNDOWN_IS_ACTIVE)) {
+        desired = val | RUNDOWN_IS_ACTIVE;
+        if (atomic_compare_exchange_strong_explicit(&rp->counter, &val, desired,
+                                                    memory_order_acq_rel, memory_order_acquire))
+        {
             // If a reference is still being held, wait until released
-            if (val != 0) {
+            if (isActive) {
                 // Wait until rundown completes
-                xEventGroupWaitBits(rp->eg, 1, pdFALSE, pdTRUE, portMAX_DELAY);
+                xEventGroupWaitBits(rp->eg, RUNDOWN_DONE_BIT, pdFALSE, pdTRUE, portMAX_DELAY);
             }
             else {
-                xEventGroupSetBits(rp->eg, 1);
+                xEventGroupSetBits(rp->eg, RUNDOWN_DONE_BIT);
             }
 
             // Done
-            break;
+            return;
         }
     }
 }

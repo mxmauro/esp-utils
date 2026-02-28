@@ -1,9 +1,9 @@
 #include "lightstd/allocator.h"
 #include <memory.h>
 
-// -----------------------------------------------------------------------------
+using namespace lightstd;
 
-namespace lightstd {
+// -----------------------------------------------------------------------------
 
 class DefaultAllocator : public IAllocator
 {
@@ -19,11 +19,11 @@ public:
     }
 };
 
-IAllocator* IAllocator::get_default() noexcept
+// -----------------------------------------------------------------------------
+
+IAllocator* IAllocator::getDefault() noexcept
 {
     static DefaultAllocator alloc;
 
     return &alloc;
 }
-
-} //namespace lightstd

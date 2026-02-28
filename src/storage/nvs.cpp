@@ -8,13 +8,13 @@ static esp_err_t convertError(esp_err_t err);
 
 // -----------------------------------------------------------------------------
 
-Storage::Storage(const char *_nameSpace, const char *_partition)
+NVSStorage::NVSStorage(const char *_nameSpace, const char *_partition) noexcept
 {
     nameSpace = _nameSpace ? _nameSpace : "storage";
     partition = _partition ? _partition : NVS_DEFAULT_PART_NAME;
 }
 
-Storage::~Storage()
+NVSStorage::~NVSStorage() noexcept
 {
     if (handle != 0) {
         nvs_close(handle);
@@ -22,7 +22,7 @@ Storage::~Storage()
     }
 }
 
-esp_err_t Storage::readStr(const char *key, lightstd::string &str)
+esp_err_t NVSStorage::readStr(const char *key, lightstd::string &str) noexcept
 {
     size_t requiredSize;
     esp_err_t err;
@@ -60,7 +60,10 @@ esp_err_t Storage::readStr(const char *key, lightstd::string &str)
     if (requiredSize > 0) {
         requiredSize--;
     }
-    str.resize(requiredSize);
+    if (!str.resize(requiredSize)) {
+        err = ESP_ERR_NO_MEM;
+        goto exit;
+    }
 
     // Done
     err = ESP_OK;
@@ -73,7 +76,7 @@ exit:
     return err;
 }
 
-esp_err_t Storage::writeStr(const char *key, const char *value)
+esp_err_t NVSStorage::writeStr(const char *key, const char *value) noexcept
 {
     esp_err_t err;
 
@@ -94,15 +97,14 @@ exit:
     return convertError(err);
 }
 
-esp_err_t Storage::readBlob(const char *key, StorageBlob_t &blob)
+esp_err_t NVSStorage::readBlob(const char *key, lightstd::vector<uint8_t> &blob) noexcept
 {
     size_t requiredSize;
     esp_err_t err;
 
     assert(key);
     assert(*key);
-    blob.value.reset();
-    blob.len = 0;
+    blob.clear();
 
     // Open storage (R/O access)
     err = open(true);
@@ -113,22 +115,21 @@ esp_err_t Storage::readBlob(const char *key, StorageBlob_t &blob)
     // Get blob size
     requiredSize = 0;
     err = nvs_get_blob(handle, key, nullptr, &requiredSize);
-    if (err != ESP_OK) {
+    if (err != ESP_OK || requiredSize == 0) {
         goto exit;
     }
 
     // Allocate output
-    if (!blob.value.allocateWithSize(requiredSize)) {
+    if (!blob.resize(requiredSize)) {
         err = ESP_ERR_NO_MEM;
         goto exit;
     }
 
     // Get blob
-    err = nvs_get_blob(handle, key, blob.value.get(), &requiredSize);
+    err = nvs_get_blob(handle, key, blob.data(), &requiredSize);
     if (err != ESP_OK) {
         goto exit;
     }
-    blob.len = requiredSize;
 
     // Done
     err = ESP_OK;
@@ -136,13 +137,12 @@ esp_err_t Storage::readBlob(const char *key, StorageBlob_t &blob)
 exit:
     err = convertError(err);
     if (err != ESP_OK) {
-        blob.value.reset();
-        blob.len = 0;
+        blob.clear();
     }
     return err;
 }
 
-esp_err_t Storage::writeBlob(const char *key, const void *value, size_t valueLen)
+esp_err_t NVSStorage::writeBlob(const char *key, const void *value, size_t valueLen) noexcept
 {
     esp_err_t err;
 
@@ -163,7 +163,7 @@ exit:
     return convertError(err);
 }
 
-esp_err_t Storage::readInt(const char *key, int32_t *pValue)
+esp_err_t NVSStorage::readInt(const char *key, int32_t *pValue) noexcept
 {
     esp_err_t err;
 
@@ -186,7 +186,7 @@ exit:
     return convertError(err);
 }
 
-esp_err_t Storage::writeInt(const char *key, int32_t value)
+esp_err_t NVSStorage::writeInt(const char *key, int32_t value) noexcept
 {
     esp_err_t err;
 
@@ -207,7 +207,7 @@ exit:
     return convertError(err);
 }
 
-esp_err_t Storage::erase(const char *key)
+esp_err_t NVSStorage::erase(const char *key) noexcept
 {
     esp_err_t err;
 
@@ -234,13 +234,13 @@ exit:
     return convertError(err);
 }
 
-void Storage::eraseAll()
+void NVSStorage::eraseAll() noexcept
 {
     nvs_flash_erase_partition(partition);
     nvs_flash_init_partition(partition);
 }
 
-esp_err_t Storage::open(bool readOnly)
+esp_err_t NVSStorage::open(bool readOnly) noexcept
 {
     esp_err_t err;
 
@@ -266,13 +266,13 @@ esp_err_t Storage::open(bool readOnly)
     return convertError(err);
 }
 
-esp_err_t Storage::init()
+esp_err_t NVSStorage::init() noexcept
 {
     static Mutex initMtx;
     static bool volatile initialized = false;
 
     if (!initialized) {
-        AutoMutex lock(&initMtx);
+        AutoMutex lock(initMtx);
 
         if (!initialized) {
             esp_err_t err;

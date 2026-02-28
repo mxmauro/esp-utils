@@ -18,10 +18,13 @@ static inline bool isBlank(char c)
 
 bool toHex(const void *src, size_t srcLen, char *dest, size_t *destLen)
 {
-    if (*destLen < HEX_ENCODE_SIZE(srcLen) + 1) {
-        *destLen = HEX_ENCODE_SIZE(srcLen) + 1;
+    size_t origDestLen = *destLen;
+    if (origDestLen < HEX_ENCODE_SIZE(srcLen)) {
+        *destLen = HEX_ENCODE_SIZE(srcLen);
         return false;
     }
+
+    *destLen = srcLen * 2;
 
     const uint8_t *ptr = (const uint8_t *)src;
     while (srcLen > 0) {
@@ -32,15 +35,14 @@ bool toHex(const void *src, size_t srcLen, char *dest, size_t *destLen)
         srcLen -= 1;
     }
 
-    *destLen = srcLen * 2;
-    *dest = 0;
+    if (origDestLen > *destLen) {
+        *dest = 0;
+    }
     return true;
 }
 
 bool fromHex(const char *src, size_t srcLen, uint8_t *dest, size_t *destLen)
 {
-    uint8_t v;
-
     if ((srcLen & 1) != 0 || *destLen < srcLen / 2) {
         *destLen = srcLen / 2;
         return false;
@@ -49,6 +51,8 @@ bool fromHex(const char *src, size_t srcLen, uint8_t *dest, size_t *destLen)
     *destLen = srcLen / 2;
 
     while (srcLen > 0) {
+        uint8_t v;
+
         if (*src >= '0' && *src <= '9') {
             v = (uint8_t)(*src - '0');
         }
@@ -80,35 +84,33 @@ bool fromHex(const char *src, size_t srcLen, uint8_t *dest, size_t *destLen)
 
 bool toB64(const void *src, size_t srcLen, bool isUrl, char *dest, size_t *destLen)
 {
-    const uint8_t *s = (const uint8_t *)src;
     size_t full = srcLen / 3;
     size_t rem  = srcLen % 3;
-    size_t required;
-    size_t out;
-    size_t i;
+    size_t requiredDestLen;
     uint32_t v;
 
     if (!isUrl) {
         // Standard base64 uses '=' padding
-        required = B64_ENCODE_SIZE(srcLen);
+        requiredDestLen = B64_ENCODE_SIZE(srcLen);
     }
     else {
         // URL-safe form without padding
         // 0 -> +0, 1 -> +2 chars, 2 -> +3 chars
-        required = 4 * full + (rem ? (rem + 1) : 0);
+        requiredDestLen = 4 * full + (rem ? (rem + 1) : 0);
     }
-    required += 1; // Include trailing nul terminator
 
-    if (*destLen < required) {
-        *destLen = required;
+    if (*destLen < requiredDestLen) {
+        *destLen = requiredDestLen;
         return false;
     }
 
-    out = 0;
-    for (i = 0; i < full; ++i) {
+    const uint8_t *s = (const uint8_t *)src;
+    size_t out = 0;
+
+    for (size_t i = 0; i < full; ++i) {
         v = ((uint32_t)s[3 * i    ] << 16) |
             ((uint32_t)s[3 * i + 1] <<  8) |
-            (uint32_t)s[3 * i + 2];
+             (uint32_t)s[3 * i + 2];
         dest[out++] = b64EncodeChar((v >> 18) & 0x3F, isUrl);
         dest[out++] = b64EncodeChar((v >> 12) & 0x3F, isUrl);
         dest[out++] = b64EncodeChar((v >>  6) & 0x3F, isUrl);
@@ -137,9 +139,12 @@ bool toB64(const void *src, size_t srcLen, bool isUrl, char *dest, size_t *destL
             }
             break;
     }
-    dest[out] = 0;
 
+    if (out < *destLen) {
+        dest[out] = 0;
+    }
     *destLen = out;
+
     return true;
 }
 
@@ -149,14 +154,12 @@ bool fromB64(const char *src, size_t srcLen, bool isUrl, uint8_t *dest, size_t *
     int vCount = 0;
     bool seenPad = false;
     size_t out = 0;
-    size_t maxBufSize;
-    size_t i;
     int8_t v;
 
-    maxBufSize = *destLen;
+    size_t maxBufSize = *destLen;
     *destLen = (srcLen / 4) * 3; // Guess size based on input
 
-    for (i = 0; i < srcLen; i++) {
+    for (size_t i = 0; i < srcLen; i++) {
         char c = src[i];
 
         if (isBlank(c)) {
@@ -232,6 +235,8 @@ bool fromB64(const char *src, size_t srcLen, bool isUrl, uint8_t *dest, size_t *
     *destLen = out;
     return true;
 }
+
+// -----------------------------------------------------------------------------
 
 static char b64EncodeChar(uint8_t v, bool isUrl)
 {

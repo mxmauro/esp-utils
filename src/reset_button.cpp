@@ -13,7 +13,10 @@ static const char* TAG = "RST-BTN";
 // -----------------------------------------------------------------------------
 
 static gpio_num_t resetButtonGpioPin = GPIO_NUM_NC;
-static ResetButtonPressedHandler_t callback = nullptr;
+
+static ResetButtonPressedHandler_t handler = nullptr;
+static void *handlerCtx = nullptr;
+
 static TimerHandle_t longPressTimer = nullptr;
 static TaskHandle_t actionTaskHandle = nullptr;
 static volatile int lastLevel = 1;
@@ -27,10 +30,13 @@ static void onButtonISR(void *arg);
 
 // -----------------------------------------------------------------------------
 
-void setupResetButton(gpio_num_t gpioPin, ResetButtonPressedHandler_t handler)
+void setupResetButton(gpio_num_t gpioPin, ResetButtonPressedHandler_t _handler, void *ctx)
 {
+    assert(_handler);
+
     resetButtonGpioPin = gpioPin;
-    callback = handler;
+    handler = _handler;
+    handlerCtx = ctx;
 
     // Create the action task
     ESP_ERROR_CHECK((xTaskCreatePinnedToCore(actionTask, "rstBtnTask", 4096, nullptr, 5, &actionTaskHandle, 0) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM));
@@ -64,7 +70,7 @@ static void actionTask(void *arg)
 
         ESP_LOGI(TAG, "Reset button pressed!");
 
-        callback();
+        handler(handlerCtx);
     }
 }
 

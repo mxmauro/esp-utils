@@ -84,7 +84,7 @@ bool taskIsRunning(Task_t *task)
 
 void taskJoin(Task_t *task)
 {
-    runOnce(&task->once, [](const void *arg) -> void {
+    runOnce(&task->once, [](void *arg) -> void {
         Task_t *task = (Task_t *)arg;
 
         if (task->eg) {

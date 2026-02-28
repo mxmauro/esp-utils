@@ -1,4 +1,5 @@
 #include <unity.h>
+
 #include "run_once.h"
 
 // -----------------------------------------------------------------------------
@@ -10,7 +11,7 @@ TEST_CASE("RunOnce", "Expected behavior")
 
     runOnceInit(&once);
 
-    auto cb = [](const void *arg) {
+    auto cb = [](void *arg) {
         int *counter = (int *)arg;
         (*counter)++;
     };

@@ -4,7 +4,7 @@
 
 // -----------------------------------------------------------------------------
 
-typedef void (*ResetButtonPressedHandler_t)();
+typedef void (*ResetButtonPressedHandler_t)(void *ctx);
 
 // -----------------------------------------------------------------------------
 
@@ -14,7 +14,7 @@ extern "C" {
 
 // Setup the reset button on the specified GPIO pin and call the handler
 // when pressed.
-void setupResetButton(gpio_num_t gpioPin, ResetButtonPressedHandler_t handler);
+void setupResetButton(gpio_num_t gpioPin, ResetButtonPressedHandler_t handler, void *ctx = nullptr);
 
 #ifdef __cplusplus
 }
