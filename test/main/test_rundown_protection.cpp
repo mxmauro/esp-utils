@@ -8,8 +8,6 @@ TEST_CASE("RundownProtection basic lifecycle", "acquire/release/wait transitions
 {
     RundownProtection_t rp = RUNDOWN_PROTECTION_INIT_STATIC;
 
-    rundownProtInit(&rp);
-
     TEST_ASSERT_TRUE(rundownProtAcquire(&rp));
     rundownProtRelease(&rp);
 
@@ -22,7 +20,7 @@ TEST_CASE("RundownProtection basic lifecycle", "acquire/release/wait transitions
 
 TEST_CASE("RundownProtection wait without references", "wait still marks rundown active")
 {
-    RundownProtection_t rp = RUNDOWN_PROTECTION_INIT_STATIC;
+    RundownProtection_t rp;
 
     rundownProtInit(&rp);
     rundownProtWait(&rp);

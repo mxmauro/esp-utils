@@ -13,11 +13,15 @@
 // code paths that may tear down that state (e.g., during unload).
 typedef struct RundownProtection_s {
     _Atomic(uint32_t) counter;
-    EventGroupHandle_t eg;
+    _Atomic(EventGroupHandle_t) eg;
     StaticEventGroup_t eventGroupBuffer;
 } RundownProtection_t;
 
-#define RUNDOWN_PROTECTION_INIT_STATIC { .counter = 0, .eg = nullptr, .eventGroupBuffer = {} }
+#define RUNDOWN_PROTECTION_INIT_STATIC {  \
+    .counter = ATOMIC_VAR_INIT(0),  \
+    .eg = ATOMIC_VAR_INIT(nullptr), \
+    .eventGroupBuffer = {}          \
+}
 
 // -----------------------------------------------------------------------------
 
