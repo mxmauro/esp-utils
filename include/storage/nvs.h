@@ -1,13 +1,16 @@
 #pragma once
 
-#ifndef __cplusplus
-    #error C++ compiler required.
-#endif // !__cplusplus
-
-#include "istorage.h"
+#ifdef __cplusplus
+    #include "istorage.h"
+#endif // __cplusplus
+#include <esp_err.h>
 #include <nvs.h>
 
 // -----------------------------------------------------------------------------
+
+esp_err_t nvsInit();
+
+#ifdef __cplusplus
 
 // Non-volatile storage implementation of the IStorage interface using
 // ESP-IDF NVS.
@@ -44,3 +47,5 @@ private:
     nvs_handle_t handle{0};
     bool readOnlyMode{false};
 };
+
+#endif // __cplusplus

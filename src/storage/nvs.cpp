@@ -4,9 +4,37 @@
 
 // -----------------------------------------------------------------------------
 
+static Mutex nvsInitMtx;
+static bool volatile nvsInitialized = false;
+
+// -----------------------------------------------------------------------------
+
 static esp_err_t convertError(esp_err_t err);
 
 // -----------------------------------------------------------------------------
+
+esp_err_t nvsInit()
+{
+    AutoMutex lock(nvsInitMtx);
+
+    if (!nvsInitialized) {
+        esp_err_t err;
+
+        err = nvs_flash_init();
+        if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+            nvs_flash_erase();
+            err = nvs_flash_init();
+        }
+        if (err != ESP_OK) {
+            return err;
+        }
+
+        nvsInitialized = true;
+    }
+
+    // Done
+    return ESP_OK;
+}
 
 NVSStorage::NVSStorage(const char *_nameSpace, const char *_partition) noexcept
 {
@@ -268,30 +296,12 @@ esp_err_t NVSStorage::open(bool readOnly) noexcept
 
 esp_err_t NVSStorage::init() noexcept
 {
-    static Mutex initMtx;
-    static bool volatile initialized = false;
+    esp_err_t err;
 
-    if (!initialized) {
-        AutoMutex lock(initMtx);
-
-        if (!initialized) {
-            esp_err_t err;
-
-            err = nvs_flash_init();
-            if ((err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) &&
-                strcasecmp(partition, NVS_DEFAULT_PART_NAME) == 0
-            ) {
-                nvs_flash_erase();
-                err = nvs_flash_init();
-            }
-            if (err != ESP_OK) {
-                return err;
-            }
-
-            initialized = true;
-        }
+    err =-nvsInit();
+    if (err != ESP_OK) {
+        return err;
     }
-
     return nvs_flash_init_partition(partition);
 }
 
