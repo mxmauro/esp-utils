@@ -1,5 +1,4 @@
 #include <unity.h>
-
 #include "lightstd/vector.h"
 
 using namespace lightstd;

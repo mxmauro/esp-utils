@@ -7,6 +7,7 @@ endif()
 set(srcs "src/convert.cpp"
          "src/growable_buffer.cpp"
          "src/fnv.cpp"
+         "src/mutex.cpp"
          "src/onboard_led.cpp"
          "src/reset_button.cpp"
          "src/run_once.cpp"

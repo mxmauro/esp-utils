@@ -1,6 +1,5 @@
 #include <utility>
 #include <unity.h>
-
 #include "lightstd/functional.h"
 
 using namespace lightstd;

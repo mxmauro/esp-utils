@@ -1,5 +1,4 @@
 #include <unity.h>
-
 #include "lightstd/string.h"
 
 using namespace lightstd;

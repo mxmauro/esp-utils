@@ -1,5 +1,4 @@
 #include <unity.h>
-
 #include "storage/istorage.h"
 #include "storage/nvs.h"
 

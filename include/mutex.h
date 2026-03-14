@@ -1,28 +1,61 @@
 #pragma once
 
-#ifndef __cplusplus
-    #error C++ compiler required.
-#endif // !__cplusplus
-
+// Mutex provides a simple mutex wrapper around FreeRTOS semaphores.
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 
 // -----------------------------------------------------------------------------
 
-// Mutex provides a simple mutex wrapper around FreeRTOS semaphores.
+typedef struct Mutex_s {
+    SemaphoreHandle_t h;
+    StaticSemaphore_t staticBuffer;
+} Mutex_t;
+
+typedef struct RwMutex_s {
+    SemaphoreHandle_t writer;
+    StaticSemaphore_t writerStaticBuffer;
+    SemaphoreHandle_t reader;
+    StaticSemaphore_t readerStaticBuffer;
+    uint32_t readersCount;
+} RwMutex_t;
+
+// -----------------------------------------------------------------------------
+
+void mutexInit(Mutex_t *mtx);
+void mutexDeinit(Mutex_t *mtx);
+
+void mutexLock(Mutex_t *mtx);
+void mutexUnlock(Mutex_t *mtx);
+
+// -----------------------------------------------------------------------------
+
+void rwMutexInit(RwMutex_t *rwMtx);
+void rwMutexDeinit(RwMutex_t *rwMtx);
+
+void rwMutexLockRead(RwMutex_t *rwMtx);
+void rwMutexUnlockRead(RwMutex_t *rwMtx);
+void rwMutexLockWrite(RwMutex_t *rwMtx);
+void rwMutexUnlockWrite(RwMutex_t *rwMtx);
+
+// -----------------------------------------------------------------------------
+
+#ifdef __cplusplus
+extern "C" {
+#endif // __cplusplus
+
 class Mutex
 {
 public:
     Mutex()
     {
-        mtx = xSemaphoreCreateMutexStatic(&mtxStaticBuffer);
+        mutexInit(&mtx);
     }
     Mutex(const Mutex&) = delete;
     Mutex(Mutex&&) = delete;
 
     ~Mutex()
     {
-        vSemaphoreDelete(mtx);
+        mutexDeinit(&mtx);
     }
 
     Mutex& operator=(const Mutex&) = delete;
@@ -30,17 +63,16 @@ public:
 
     void Lock()
     {
-        xSemaphoreTake(mtx, portMAX_DELAY);
+        mutexLock(&mtx);
     }
 
     void Unlock()
     {
-        xSemaphoreGive(mtx);
+        mutexUnlock(&mtx);
     }
 
 private:
-    SemaphoreHandle_t mtx{nullptr};
-    StaticSemaphore_t mtxStaticBuffer{};
+    Mutex_t mtx;
 };
 
 class RWMutex
@@ -48,17 +80,14 @@ class RWMutex
 public:
     RWMutex()
     {
-        readerMtx = xSemaphoreCreateMutexStatic(&readerMtxStaticBuffer);
-        writerMtx = xSemaphoreCreateMutexStatic(&writerMtxStaticBuffer);
-        readersCount = 0;
+        rwMutexInit(&rwMtx);
     }
     RWMutex(const RWMutex&) = delete;
     RWMutex(RWMutex&&) = delete;
 
     ~RWMutex()
     {
-        vSemaphoreDelete(readerMtx);
-        vSemaphoreDelete(writerMtx);
+        rwMutexDeinit(&rwMtx);
     }
 
     RWMutex& operator=(const RWMutex&) = delete;
@@ -66,40 +95,26 @@ public:
 
     void LockRead()
     {
-        xSemaphoreTake(readerMtx, portMAX_DELAY);
-        readersCount += 1;
-        if (readersCount == 1) {
-            xSemaphoreTake(writerMtx, portMAX_DELAY);  // First reader locks
-        }
-        xSemaphoreGive(readerMtx);
+        rwMutexLockRead(&rwMtx);
     }
 
     void UnlockRead()
     {
-        xSemaphoreTake(readerMtx, portMAX_DELAY);
-        readersCount -= 1;
-        if (readersCount == 0) {
-            xSemaphoreGive(writerMtx);  // Last reader unlocks
-        }
-        xSemaphoreGive(readerMtx);
+        rwMutexUnlockRead(&rwMtx);
     }
 
     void LockWrite()
     {
-        xSemaphoreTake(writerMtx, portMAX_DELAY);
+        rwMutexLockWrite(&rwMtx);
     }
 
     void UnlockWrite()
     {
-        xSemaphoreGive(writerMtx);
+        rwMutexUnlockWrite(&rwMtx);
     }
 
 private:
-    SemaphoreHandle_t writerMtx{nullptr};
-    StaticSemaphore_t writerMtxStaticBuffer{};
-    SemaphoreHandle_t readerMtx{nullptr};
-    StaticSemaphore_t readerMtxStaticBuffer{};
-    uint32_t readersCount{0};
+    RwMutex_t rwMtx;
 };
 
 class AutoMutex
@@ -156,3 +171,7 @@ private:
     RWMutex &rwMtx;
     bool shared;
 };
+
+#ifdef __cplusplus
+}
+#endif // __cplusplus
