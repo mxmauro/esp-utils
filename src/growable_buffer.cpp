@@ -3,6 +3,13 @@
 
 // -----------------------------------------------------------------------------
 
+void gbInit(GrowableBuffer_t *gb)
+{
+    gb->buffer = nullptr;
+    gb->used = 0;
+    gb->size = 0;
+}
+
 void gbReset(GrowableBuffer_t *gb, bool _free)
 {
     if (_free) {

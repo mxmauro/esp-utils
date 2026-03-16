@@ -205,8 +205,7 @@ public:
 
     [[nodiscard]] bool resize(size_t newLen, const T& fillValue) noexcept
     {
-        static_assert(std::is_nothrow_copy_constructible_v<T>,
-                      "resize(n, value) requires T to be nothrow copy constructible.");
+        static_assert(std::is_nothrow_copy_constructible_v<T>, "resize(n, value) requires T to be nothrow copy constructible.");
 
         if (newLen == len) {
             return true;
@@ -251,8 +250,7 @@ public:
 
     [[nodiscard]] bool push_back(const T& v) noexcept
     {
-        static_assert(std::is_nothrow_copy_constructible_v<T>,
-                      "push_back(const T&) requires T to be nothrow copy constructible.");
+        static_assert(std::is_nothrow_copy_constructible_v<T>, "push_back(const T&) requires T to be nothrow copy constructible.");
 
         // Check if v aliases an element inside our buffer. If reallocation is needed
         // and v points into ptr, it would dangle after the move. In that case copy
@@ -280,8 +278,7 @@ public:
 
     [[nodiscard]] bool push_back(T&& v) noexcept
     {
-        static_assert(std::is_nothrow_move_constructible_v<T>,
-                      "push_back(const T&) requires T to be nothrow move constructible.");
+        static_assert(std::is_nothrow_move_constructible_v<T>, "push_back(const T&) requires T to be nothrow move constructible.");
 
         if (!ensure_capacity_for_one_more()) {
             return false;
@@ -296,8 +293,7 @@ public:
     template <class... Args>
     [[nodiscard]] bool emplace_back(Args&&... args) noexcept
     {
-        static_assert(std::is_nothrow_constructible_v<T, Args...>,
-                      "emplace_back requires T(args...) to be nothrow constructible.");
+        static_assert(std::is_nothrow_constructible_v<T, Args...>, "emplace_back requires T(args...) to be nothrow constructible.");
 
         if (!ensure_capacity_for_one_more()) {
             return false;
@@ -351,8 +347,7 @@ private:
     {
         T* newPtr;
 
-        static_assert(std::is_nothrow_move_constructible_v<T>,
-              "vector requires T to be nothrow move constructible for reallocation.");
+        static_assert(std::is_nothrow_move_constructible_v<T>, "vector requires T to be nothrow move constructible for reallocation.");
 
         if (!force && newCapacity <= cap) {
             return true;

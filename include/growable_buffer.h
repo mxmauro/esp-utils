@@ -4,8 +4,6 @@
 
 #define GB_STATIC_INIT { nullptr, 0, 0 }
 
-#define gbInit(gb) gb = GB_STATIC_INIT
-
 // -----------------------------------------------------------------------------
 
 // Growable buffer is a simple structure to manage a dynamically growing buffer.
@@ -21,6 +19,8 @@ typedef struct GrowableBuffer_s {
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
+
+void gbInit(GrowableBuffer_t *gb);
 
 // If _free is true, the internal buffer is freed. Else, only the used field is reset.
 void gbReset(GrowableBuffer_t *gb, bool free);

@@ -67,8 +67,7 @@ public:
 private:
     // Vtable: plain function pointers — no virtual dispatch, no RTTI.
     // alloc_size carries sizeof(F)
-    struct Vtable
-    {
+    struct Vtable {
         R           (*invoke)       (void* storage, Args&&... args);
         void        (*copy)         (void* dst, const void* src);
         void        (*move_destroy) (void* dst, void* src); // move dst, destroy src
@@ -137,8 +136,7 @@ private:
         // may still invoke the new-handler or behave implementation-defined.
         // std::nothrow guarantees a nullptr return on failure.
         void* mem = ::operator new(sizeof(Fd), std::nothrow);
-        if (!mem)
-        {
+        if (!mem) {
             // Out of heap memory — unrecoverable on ESP-IDF.
             abort();
         }
@@ -167,12 +165,7 @@ private:
         //     standard-library type (std::string, std::vector, std::shared_ptr,
         //     …) has a noexcept move constructor by design. The rule is simple:
         //     if your move constructor cannot throw, mark it noexcept.
-        static_assert(
-            std::is_nothrow_move_constructible<Fd>::value,
-            "light_function: stored callable must be nothrow move constructible. "
-            "All standard lambdas and well-designed functors satisfy this. "
-            "If your type has a throwing move ctor, wrap it in std::unique_ptr."
-        );
+        static_assert(std::is_nothrow_move_constructible<Fd>::value, "light_function: stored callable must be nothrow move constructible.");
 
         // [2] Nothrow copy constructor (required)
         //
@@ -211,12 +204,9 @@ private:
         //     If you genuinely need a copyable lambda that owns a std::string,
         //     wrap the string in a std::shared_ptr<std::string>: the shared_ptr
         //     copy is nothrow and both lambda copies share the same string.
-        static_assert(
-            std::is_nothrow_copy_constructible<Fd>::value,
-            "light_function: stored callable must be nothrow copy constructible. "
-            "Capture heavy types by reference [&x] instead of by value [x], "
-            "or wrap shared state in std::shared_ptr."
-        );
+        static_assert(std::is_nothrow_copy_constructible<Fd>::value,
+                      "light_function: stored callable must be nothrow copy constructible. "
+                      "Capture heavy types by reference [&x] instead of by value [x].");
 
         do_store<Fd>(std::forward<F>(f), fits{});
         m_vtable = vtable_for<Fd>();
@@ -224,11 +214,9 @@ private:
 
     void do_destroy() noexcept
     {
-        if (m_vtable)
-        {
+        if (m_vtable) {
             m_vtable->destroy(active_storage());
-            if (m_heap)
-            {
+            if (m_heap) {
                 ::operator delete(m_heap);
                 m_heap = nullptr;
             }
@@ -238,13 +226,16 @@ private:
 
     void do_copy_from(const light_function& other) noexcept
     {
-        if (!other.m_vtable) return;
+        if (!other.m_vtable) {
+            return;
+        }
 
-        if (other.m_heap)
-        {
+        if (other.m_heap) {
             // Null-check the allocation; abort() on failure (heap exhausted).
             void* mem = ::operator new(other.m_vtable->alloc_size, std::nothrow);
-            if (!mem) abort();
+            if (!mem) {
+                abort();
+            }
 
             // The static_asserts in do_assign guarantee the stored callable is
             // nothrow copy constructible, so vtable->copy() below cannot throw
@@ -261,8 +252,7 @@ private:
             guard.committed = true;
             m_heap = mem;
         }
-        else
-        {
+        else {
             m_heap = nullptr;
             other.m_vtable->copy(m_sbo, other.m_sbo);
         }
@@ -285,16 +275,16 @@ private:
     //                 is what gets stored.
     void do_move_from(light_function& other) noexcept
     {
-        if (!other.m_vtable) return;
+        if (!other.m_vtable) {
+            return;
+        }
 
-        if (other.m_heap)
-        {
+        if (other.m_heap) {
             // Steal the heap pointer — no allocation needed.
             m_heap = other.m_heap;
             other.m_heap = nullptr;
         }
-        else
-        {
+        else {
             m_heap = nullptr;
             // Move-construct into our SBO, then destroy the source SBO object.
             other.m_vtable->move_destroy(m_sbo, other.m_sbo);
@@ -316,9 +306,7 @@ public:
     // prefer assigning same-SboSize instances when possible.
     template<
         typename F,
-        typename = typename std::enable_if<
-            !std::is_same<typename std::decay<F>::type, light_function>::value
-        >::type
+        typename = typename std::enable_if<!std::is_same<typename std::decay<F>::type, light_function>::value>::type
     >
     light_function(F&& f) noexcept
     {
@@ -342,8 +330,7 @@ public:
 
     light_function& operator=(const light_function& other) noexcept
     {
-        if (this != &other)
-        {
+        if (this != &other) {
             do_destroy();
             do_copy_from(other);
         }
@@ -352,8 +339,7 @@ public:
 
     light_function& operator=(light_function&& other) noexcept
     {
-        if (this != &other)
-        {
+        if (this != &other) {
             do_destroy();
             do_move_from(other);
         }
@@ -368,9 +354,7 @@ public:
 
     template<
         typename F,
-        typename = typename std::enable_if<
-            !std::is_same<typename std::decay<F>::type, light_function>::value
-        >::type
+        typename = typename std::enable_if<!std::is_same<typename std::decay<F>::type, light_function>::value>::type
     >
     light_function& operator=(F&& f) noexcept
     {
@@ -392,17 +376,13 @@ public:
     //   This matches std::function's calling convention exactly.
     R operator()(Args... args) const
     {
-        if (!m_vtable)
-        {
+        if (!m_vtable) {
             // Calling an empty light_function is a hard programming error.
             abort();
         }
         // const_cast: the stored callable may have mutable state (e.g. a
         // mutable lambda). This mirrors std::function behaviour.
-        return m_vtable->invoke(
-            const_cast<light_function*>(this)->active_storage(),
-            std::forward<Args>(args)...
-        );
+        return m_vtable->invoke(const_cast<light_function*>(this)->active_storage(), std::forward<Args>(args)...);
     }
 
     explicit operator bool() const noexcept

@@ -39,7 +39,8 @@ void setupResetButton(gpio_num_t gpioPin, ResetButtonPressedHandler_t _handler, 
     handlerCtx = ctx;
 
     // Create the action task
-    ESP_ERROR_CHECK((xTaskCreatePinnedToCore(actionTask, "rstBtnTask", 4096, nullptr, 5, &actionTaskHandle, 0) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM));
+    ESP_ERROR_CHECK((xTaskCreatePinnedToCore(actionTask, "rstBtnTask", 4096, nullptr, 5, &actionTaskHandle, 0) == pdPASS
+                     ? ESP_OK : ESP_ERR_NO_MEM));
 
     // Create one-shot long-press timer
     longPressTimer = xTimerCreate("rstBtnTimer", pdMS_TO_TICKS(LONG_PRESS_MS), pdFALSE, nullptr, onLongPressTimer);

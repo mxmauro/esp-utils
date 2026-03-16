@@ -17,10 +17,10 @@ typedef struct RundownProtection_s {
     StaticEventGroup_t eventGroupBuffer;
 } RundownProtection_t;
 
-#define RUNDOWN_PROTECTION_INIT_STATIC {  \
-    .counter = ATOMIC_VAR_INIT(0),  \
-    .eg = ATOMIC_VAR_INIT(nullptr), \
-    .eventGroupBuffer = {}          \
+#define RUNDOWN_PROTECTION_INIT_STATIC { \
+    .counter = ATOMIC_VAR_INIT(0),       \
+    .eg = ATOMIC_VAR_INIT(nullptr),      \
+    .eventGroupBuffer = {}               \
 }
 
 // -----------------------------------------------------------------------------

@@ -49,8 +49,7 @@ bool rundownProtAcquire(RundownProtection_t *rp)
 
         // Try to increment the reference counter
         desired = val + 1;
-        if (atomic_compare_exchange_strong_explicit(&rp->counter, &val, desired,
-                                                    memory_order_acquire, memory_order_acquire))
+        if (atomic_compare_exchange_strong_explicit(&rp->counter, &val, desired, memory_order_acquire, memory_order_acquire))
         {
             return true;
         }
@@ -72,8 +71,7 @@ void rundownProtRelease(RundownProtection_t *rp)
         // Decrement usage counter but keep the rundown active flag if present
         desired  = (val & RUNDOWN_IS_ACTIVE) | (ref - 1);
 
-        if (atomic_compare_exchange_strong_explicit(&rp->counter, &val, desired,
-                                                    memory_order_release, memory_order_acquire))
+        if (atomic_compare_exchange_strong_explicit(&rp->counter, &val, desired, memory_order_release, memory_order_acquire))
         {
             // If a wait is in progress and the last reference is being released, complete the wait
             if (desired == RUNDOWN_IS_ACTIVE) {
@@ -109,8 +107,7 @@ void rundownProtWait(RundownProtection_t *rp)
 
         // Set rundown active flag
         desired = val | RUNDOWN_IS_ACTIVE;
-        if (atomic_compare_exchange_strong_explicit(&rp->counter, &val, desired,
-                                                    memory_order_acq_rel, memory_order_acquire))
+        if (atomic_compare_exchange_strong_explicit(&rp->counter, &val, desired, memory_order_acq_rel, memory_order_acquire))
         {
             // If a reference is still being held, wait until released
             if (isActive) {
@@ -144,8 +141,7 @@ static inline EventGroupHandle_t rpEnsureEventGroup(RundownProtection_t *rp)
 
     // Try to become the creator
     expected = nullptr;
-    if (atomic_compare_exchange_strong_explicit(&rp->eg, &expected, CREATING,
-                                                memory_order_acq_rel, memory_order_acquire)) {
+    if (atomic_compare_exchange_strong_explicit(&rp->eg, &expected, CREATING, memory_order_acq_rel, memory_order_acquire)) {
         // We won: create using the per-object static buffer
         eg = xEventGroupCreateStatic(&rp->eventGroupBuffer);
         atomic_store_explicit(&rp->eg, eg, memory_order_release);
