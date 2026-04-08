@@ -7,6 +7,8 @@ void mutexInit(Mutex_t *mtx)
 {
     assert(mtx);
     memset(mtx, 0, sizeof(Mutex_t));
+    // Static FreeRTOS mutex creation uses caller-provided storage, so a valid
+    // buffer should be sufficient and allocation failure is not expected here.
     mtx->h = xSemaphoreCreateMutexStatic(&mtx->staticBuffer);
 }
 

@@ -86,7 +86,7 @@ void rundownProtRelease(RundownProtection_t *rp)
 void rundownProtWait(RundownProtection_t *rp)
 {
     EventGroupHandle_t eg;
-    uint32_t val, desired, isActive;
+    uint32_t val, desired, ref;
 
     // Lazy initialization of the event group.
     eg = rpEnsureEventGroup(rp);
@@ -94,10 +94,8 @@ void rundownProtWait(RundownProtection_t *rp)
     // Get rundown active flag
     val = atomic_load_explicit(&rp->counter, memory_order_acquire);
     for (;;) {
-        isActive = val & RUNDOWN_IS_ACTIVE;
-
         // Check if wait was already called (concurrent waits are also allowed)
-        if (isActive) {
+        if (val & RUNDOWN_IS_ACTIVE) {
             // Wait until rundown completes
             xEventGroupWaitBits(eg, RUNDOWN_DONE_BIT, pdFALSE, pdTRUE, portMAX_DELAY);
 
@@ -109,13 +107,14 @@ void rundownProtWait(RundownProtection_t *rp)
         desired = val | RUNDOWN_IS_ACTIVE;
         if (atomic_compare_exchange_strong_explicit(&rp->counter, &val, desired, memory_order_acq_rel, memory_order_acquire))
         {
-            // If a reference is still being held, wait until released
-            if (isActive) {
-                // Wait until rundown completes
-                xEventGroupWaitBits(eg, RUNDOWN_DONE_BIT, pdFALSE, pdTRUE, portMAX_DELAY);
+            ref = val & RUNDOWN_REF_MASK;
+
+            if (ref == 0) {
+                xEventGroupSetBits(eg, RUNDOWN_DONE_BIT);
             }
             else {
-                xEventGroupSetBits(eg, RUNDOWN_DONE_BIT);
+                // Wait until the last holder releases its reference.
+                xEventGroupWaitBits(eg, RUNDOWN_DONE_BIT, pdFALSE, pdTRUE, portMAX_DELAY);
             }
 
             // Done
@@ -157,3 +156,4 @@ static inline EventGroupHandle_t rpEnsureEventGroup(RundownProtection_t *rp)
         taskYIELD();
     }
 }
+

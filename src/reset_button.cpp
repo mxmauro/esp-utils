@@ -8,7 +8,7 @@
 static const char* TAG = "RST-BTN";
 
 #define LONG_PRESS_MS 3000 // hold 3s to reset
-#define DEBOUNCE_US   30
+#define DEBOUNCE_MS   30
 
 // -----------------------------------------------------------------------------
 
@@ -20,7 +20,7 @@ static void *handlerCtx = nullptr;
 static TimerHandle_t longPressTimer = nullptr;
 static TaskHandle_t actionTaskHandle = nullptr;
 static volatile int lastLevel = 1;
-static volatile int64_t lastEdgeUs = 0;
+static volatile int64_t lastEdgeMs = 0;
 
 // -----------------------------------------------------------------------------
 
@@ -32,6 +32,8 @@ static void onButtonISR(void *arg);
 
 void setupResetButton(gpio_num_t gpioPin, ResetButtonPressedHandler_t _handler, void *ctx)
 {
+    gpio_config_t gpioConfig;
+
     assert(_handler);
 
     resetButtonGpioPin = gpioPin;
@@ -44,16 +46,16 @@ void setupResetButton(gpio_num_t gpioPin, ResetButtonPressedHandler_t _handler, 
 
     // Create one-shot long-press timer
     longPressTimer = xTimerCreate("rstBtnTimer", pdMS_TO_TICKS(LONG_PRESS_MS), pdFALSE, nullptr, onLongPressTimer);
+    ESP_ERROR_CHECK(longPressTimer ? ESP_OK : ESP_ERR_NO_MEM);
 
     // Configure button GPIO
-    gpio_config_t io = {
-        .pin_bit_mask = 1ULL << (int)resetButtonGpioPin,
-        .mode         = GPIO_MODE_INPUT,
-        .pull_up_en   = GPIO_PULLUP_ENABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .intr_type    = GPIO_INTR_ANYEDGE
-    };
-    ESP_ERROR_CHECK(gpio_config(&io));
+    memset(&gpioConfig, 0, sizeof(gpioConfig));
+    gpioConfig.pin_bit_mask = 1ULL << (int)resetButtonGpioPin,
+    gpioConfig.mode         = GPIO_MODE_INPUT;
+    gpioConfig.pull_up_en   = GPIO_PULLUP_ENABLE;
+    gpioConfig.pull_down_en = GPIO_PULLDOWN_DISABLE;
+    gpioConfig.intr_type    = GPIO_INTR_ANYEDGE;
+    ESP_ERROR_CHECK(gpio_config(&gpioConfig));
 
     // Install ISR and attach handler
     ESP_ERROR_CHECK(gpio_install_isr_service(0));
@@ -87,10 +89,10 @@ static void IRAM_ATTR onButtonISR(void *arg)
     const int64_t now = now_ms();
 
     // Debounce: ignore edges that occur too soon after the last one
-    if (now - lastEdgeUs < DEBOUNCE_US) {
+    if (now - lastEdgeMs < DEBOUNCE_MS) {
         return;
     }
-    lastEdgeUs = now;
+    lastEdgeMs = now;
 
     // Only react to real level changes
     if (level == lastLevel) {

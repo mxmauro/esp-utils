@@ -39,10 +39,13 @@ bool taskShouldQuit(Task_t *task);
 
 bool taskIsRunning(Task_t *task);
 
-// Signals the task to end and waits until it quits
+// Signals the task to end and waits until it quits.
+// This must not be called from the managed task itself.
 void taskJoin(Task_t *task);
 
-// Use this function ONLY if no other task calls 'taskJoin' in order to free resources.
+// Detaches the task from this Task_t instance and releases the event-group state
+// stored in the struct. The caller becomes responsible for any remaining task or
+// resource lifetime management and must ensure no other code keeps using this Task_t.
 void taskDetach(Task_t *task);
 
 #ifdef __cplusplus
