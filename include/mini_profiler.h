@@ -18,17 +18,18 @@
 
 // -----------------------------------------------------------------------------
 
-// MiniProfiler implements a simple RAII-style profiler that logs the start time and duration
-// of a code block.
+// Logs the lifetime of a scope using RAII.
 class MiniProfiler
 {
 public:
+    // Starts profiling a named scope for the given log tag.
     explicit MiniProfiler(const char *_tag, const char* _name) : tag(_tag), name(_name), startTimeUs(esp_timer_get_time())
     {
     }
     MiniProfiler(const MiniProfiler&) = delete;
     MiniProfiler(MiniProfiler&&) = delete;
 
+    // Logs the elapsed time for the profiled scope.
     ~MiniProfiler()
     {
         char startTimeBuf[64];
@@ -44,6 +45,7 @@ public:
     MiniProfiler& operator=(const MiniProfiler&) = delete;
     MiniProfiler& operator=(MiniProfiler&&) = delete;
 
+    // Formats an absolute timestamp in a readable hh:mm:ss.uuuuuu form.
     static void formatTime(uint64_t t, char buf[64])
     {
         uint64_t sec = t / 1'000'000;
@@ -51,6 +53,7 @@ public:
         snprintf(buf, 64, "%llu:%02u:%02u.%06llu", (sec / 3600), (unsigned int)(sec / 60) % 60, (unsigned int)(sec % 60), usec);
     }
 
+    // Formats a duration in microseconds, milliseconds, or seconds.
     static void formatDuration(uint64_t d, char buf[64])
     {
         if (d < 1000)

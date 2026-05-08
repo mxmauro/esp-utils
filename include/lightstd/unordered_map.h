@@ -17,14 +17,14 @@ namespace lightstd {
 template<typename K>
 struct static_hash_map_default_hash
 {
+     // Hashes the key as a raw byte sequence.
      uint32_t operator()(const K& key) const
      {
          return fnv1a32(&key, sizeof(key));
      }
 };
 
-// Simple static unordered map with open addressing and linear probing.
-// Note: No dynamic resizing, fixed size table allocated at initialization.
+// Stores key-value pairs in a fixed-size open-addressed hash table.
 template<typename K, typename V, typename HashFn = static_hash_map_default_hash<K>>
 class static_hash_map
 {
@@ -42,19 +42,47 @@ private:
     } Entry_t;
 
 public:
-    static_hash_map() = default;
+    // Creates an empty map with no allocated table.
+    static_hash_map() noexcept = default;
     static_hash_map(const static_hash_map&) = delete;
-    static_hash_map(static_hash_map&&) = delete;
+    // Transfers ownership of the allocated hash table.
+    static_hash_map(static_hash_map&& other) noexcept : table(other.table), tableSize(other.tableSize), count(other.count),
+                                                        tombstones(other.tombstones)
+    {
+        other.table = nullptr;
+        other.tableSize = 0;
+        other.count = 0;
+        other.tombstones = 0;
+    }
 
+    // Releases the allocated hash table.
     ~static_hash_map()
     {
-        done();
+        deinit();
     }
 
     static_hash_map& operator=(const static_hash_map&) = delete;
-    static_hash_map& operator=(static_hash_map&&) = delete;
+    // Transfers ownership of the allocated hash table.
+    static_hash_map& operator=(static_hash_map&& other) noexcept
+    {
+        if (this != &other) {
+            deinit();
 
-    esp_err_t init(size_t _tableSize)
+            table = other.table;
+            tableSize = other.tableSize;
+            count = other.count;
+            tombstones = other.tombstones;
+
+            other.table = nullptr;
+            other.tableSize = 0;
+            other.count = 0;
+            other.tombstones = 0;
+        }
+        return *this;
+    }
+
+    // Allocates a fixed-size table for the requested number of slots.
+    esp_err_t init(size_t _tableSize) noexcept
     {
         if (_tableSize < 1) {
             return ESP_ERR_INVALID_ARG;
@@ -74,7 +102,8 @@ public:
         return ESP_OK;
     }
 
-    void done()
+    // Releases the allocated table and resets the map state.
+    void deinit() noexcept
     {
         if (table) {
             memset(table, 0, tableSize * sizeof(Entry_t));
@@ -86,8 +115,14 @@ public:
         tombstones = 0;
     }
 
-    // Insert or update
-    V* insert(const K& key, const V& value, bool* inserted = nullptr)
+    // Releases the allocated table and resets the map state.
+    void done() noexcept
+    {
+        deinit();
+    }
+
+    // Inserts a new key or updates the value of an existing key.
+    V* insert(const K& key, const V& value, bool* inserted = nullptr) noexcept
     {
         size_t idx = getHash(key) % tableSize;
         size_t start = idx;
@@ -134,8 +169,8 @@ public:
         return nullptr;
     }
 
-    // Find value by key (fast - only stops at EMPTY)
-    V* find(const K& key)
+    // Returns the value pointer for a key or nullptr if not found.
+    V* find(const K& key) noexcept
     {
         size_t idx = getHash(key) % tableSize;
         size_t start = idx;
@@ -157,14 +192,14 @@ public:
         return nullptr;
     }
 
-    // Check if key exists
-    bool contains(const K& key)
+    // Reports whether the requested key exists in the map.
+    bool contains(const K& key) noexcept
     {
         return find(key) != nullptr;
     }
 
-    // Remove entry (fast - just mark as tombstone)
-    bool erase(const K& key)
+    // Removes a key and leaves a tombstone for probing continuity.
+    bool erase(const K& key) noexcept
     {
         size_t idx = getHash(key) % tableSize;
         size_t start = idx;
@@ -193,20 +228,20 @@ public:
         return false;
     }
 
-    // Get current size
-    size_t size() const
+    // Returns the number of occupied entries.
+    size_t size() const noexcept
     {
         return (size_t)count;
     }
 
-    // Check if empty
-    bool empty() const
+    // Reports whether the map contains no entries.
+    bool empty() const noexcept
     {
         return count == 0;
     }
 
-    // Clear all entries
-    void clear()
+    // Removes all entries without releasing the table allocation.
+    void clear() noexcept
     {
         for (size_t i = 0; i < tableSize; i += 1) {
             table[i].state = EMPTY;
@@ -217,8 +252,8 @@ public:
         tombstones = 0;
     }
 
-    // Force cleanup of tombstones
-    void compact()
+    // Rebuilds the table to remove accumulated tombstones.
+    void compact() noexcept
     {
         if (tombstones > 0) {
             rehashIfNeeded(true);
@@ -231,26 +266,34 @@ public:
         V& value;
     } key_value_t;
 
+    // Exposes a read-only key-value view when iterating a const map.
+    typedef struct const_key_value_s {
+        const K& key;
+        const V& value;
+    } const_key_value_t;
+
 public:
     class iterator
     {
     public:
-        iterator(Entry_t* p, Entry_t* e) : ptr(p), end(e)
+        // Creates an iterator over the allocated table range.
+        iterator(Entry_t* p, Entry_t* e) noexcept : ptr(p), end(e)
         {
             // Skip to first occupied slot
             while (ptr != end && ptr->state != OCCUPIED) {
                 ptr += 1;
             }
         }
-        iterator(const iterator&) = delete;
-        iterator(iterator&&) = delete;
+        iterator(const iterator&) noexcept = default;
+        iterator(iterator&&) noexcept = default;
 
-        ~iterator() = delete;
+        ~iterator() noexcept = default;
 
-        iterator& operator=(const iterator&) = delete;
-        iterator& operator=(iterator&&) = delete;
+        iterator& operator=(const iterator&) noexcept = default;
+        iterator& operator=(iterator&&) noexcept = default;
 
-        iterator& operator++()
+        // Advances to the next occupied slot.
+        iterator& operator++() noexcept
         {
             if (ptr != end) {
                 ptr += 1;
@@ -262,12 +305,14 @@ public:
             return *this;
         }
 
-        bool operator!=(const iterator& other) const
+        // Compares iterator positions.
+        bool operator!=(const iterator& other) const noexcept
         {
             return ptr != other.ptr;
         }
 
-        key_value_t operator*()
+        // Returns references to the current key and value.
+        key_value_t operator*() noexcept
         {
             return {ptr->key, ptr->value};
         }
@@ -277,20 +322,101 @@ public:
         Entry_t* end;
     };
 
-public:
-    iterator begin()
+    class const_iterator
     {
-        return iterator(table, table + tableSize);
+    public:
+        // Creates a const iterator over the allocated table range.
+        const_iterator(const Entry_t* p, const Entry_t* e) noexcept : ptr(p), end(e)
+        {
+            while (ptr != end && ptr->state != OCCUPIED) {
+                ptr += 1;
+            }
+        }
+        const_iterator(const const_iterator&) noexcept = default;
+        const_iterator(const_iterator&&) noexcept = default;
+
+        ~const_iterator() noexcept = default;
+
+        const_iterator& operator=(const const_iterator&) noexcept = default;
+        const_iterator& operator=(const_iterator&&) noexcept = default;
+
+        // Advances to the next occupied slot.
+        const_iterator& operator++() noexcept
+        {
+            if (ptr != end) {
+                ptr += 1;
+                while (ptr != end && ptr->state != OCCUPIED) {
+                    ptr += 1;
+                }
+            }
+            return *this;
+        }
+
+        // Compares iterator positions.
+        bool operator!=(const const_iterator& other) const noexcept
+        {
+            return ptr != other.ptr;
+        }
+
+        // Returns const references to the current key and value.
+        const_key_value_t operator*() const noexcept
+        {
+            return {ptr->key, ptr->value};
+        }
+
+    private:
+        const Entry_t* ptr;
+        const Entry_t* end;
+    };
+
+public:
+    // Iteration follows internal table/probe order, not key order, matching std::unordered_map rather than std::map.
+    iterator begin() noexcept
+    {
+        return iterator(getTableBegin(), getTableEnd());
     }
 
-    iterator end()
+    // Returns an iterator one past the last table slot.
+    iterator end() noexcept
     {
-        return iterator(table + tableSize, table + tableSize);
+        return iterator(getTableEnd(), getTableEnd());
+    }
+
+    // Returns a const iterator to the first occupied slot.
+    const_iterator begin() const noexcept
+    {
+        return const_iterator(getTableBegin(), getTableEnd());
+    }
+
+    // Returns a const iterator one past the last table slot.
+    const_iterator end() const noexcept
+    {
+        return const_iterator(getTableEnd(), getTableEnd());
     }
 
 private:
+    Entry_t* getTableBegin() noexcept
+    {
+        return table;
+    }
+
+    Entry_t* getTableEnd() noexcept
+    {
+        return table ? (table + tableSize) : nullptr;
+    }
+
+    const Entry_t* getTableBegin() const noexcept
+    {
+        return table;
+    }
+
+    const Entry_t* getTableEnd() const noexcept
+    {
+        return table ? (table + tableSize) : nullptr;
+    }
+
     // Rebuild table when there are more than 25% of tombstones
-    void rehashIfNeeded(bool force)
+    void rehashIfNeeded(bool force) noexcept
     {
         if (force || tombstones > tableSize / 4) {
             if (count == 0) {

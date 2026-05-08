@@ -10,10 +10,12 @@ TEST_CASE("IStorage interface works with NVSStorage", "storage istorage")
     IStorage *storage = &nvs;
 
     TEST_ASSERT_EQUAL(ESP_OK, storage->writeInt("iface_counter", 77));
+    TEST_ASSERT_EQUAL(ESP_OK, storage->commit());
 
     int32_t value = 0;
     TEST_ASSERT_EQUAL(ESP_OK, storage->readInt("iface_counter", &value));
     TEST_ASSERT_EQUAL_INT32(77, value);
 
     TEST_ASSERT_EQUAL(ESP_OK, storage->erase("iface_counter"));
+    TEST_ASSERT_EQUAL(ESP_OK, storage->commit());
 }

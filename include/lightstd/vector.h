@@ -24,15 +24,19 @@ public:
     using iterator        = T*;
     using const_iterator  = const T*;
 
+    // Creates an empty vector using the provided allocator or the default one.
     vector(IAllocator *_alloc = nullptr) noexcept
     {
         alloc = _alloc ? _alloc : IAllocator::getDefault();
     }
 
     vector(const vector&) noexcept = delete;
-    vector(vector&& other) noexcept
+    // Transfers ownership of the vector storage.
+    vector(vector&& other) noexcept : ptr(other.ptr), len(other.len), cap(other.cap), alloc(other.alloc)
     {
-        move_from(other);
+        other.ptr = nullptr;
+        other.len = 0;
+        other.cap  = 0;
     }
 
     vector& operator=(const vector&) noexcept = delete;
@@ -40,111 +44,139 @@ public:
     {
         if (this != &other) {
             destroy_and_deallocate();
-            move_from(other);
+
+            ptr = other.ptr;
+            len = other.len;
+            cap  = other.cap;
+            alloc = other.alloc;
+
+            other.ptr = nullptr;
+            other.len = 0;
+            other.cap  = 0;
         }
         return *this;
     }
 
+    // Releases the owned storage and destroys live elements.
     ~vector() noexcept
     {
         destroy_and_deallocate();
     }
 
+    // Returns the number of constructed elements.
     [[nodiscard]] size_t size() const noexcept
     {
         return len;
     }
+    // Returns the current element capacity.
     [[nodiscard]] size_t capacity() const noexcept
     {
         return cap;
     }
+    // Reports whether the vector contains no elements.
     [[nodiscard]] bool empty() const noexcept
     {
         return len == 0;
     }
 
+    // Returns mutable access to the contiguous storage.
     T* data() noexcept
     {
         return ptr;
     }
 
+    // Returns read-only access to the contiguous storage.
     const T* data() const noexcept
     {
         return ptr;
     }
 
+    // Returns an iterator to the first element.
     iterator begin() noexcept
     {
         return ptr;
     }
 
+    // Returns a const iterator to the first element.
     const_iterator begin() const noexcept
     {
         return ptr;
     }
 
+    // Returns a const iterator to the first element.
     const_iterator cbegin() const noexcept
     {
         return ptr;
     }
 
+    // Returns an iterator one past the last element.
     iterator end() noexcept
     {
         return ptr + len;
     }
 
+    // Returns a const iterator one past the last element.
     const_iterator end() const noexcept
     {
         return ptr + len;
     }
 
+    // Returns a const iterator one past the last element.
     const_iterator cend() const noexcept
     {
         return ptr + len;
     }
 
+    // Returns a reference to the element at the requested index.
     [[nodiscard]] T& operator[](size_t idx) noexcept
     {
         assert(idx < len);
         return ptr[idx]; // WARNING: no bounds check
     }
 
+    // Returns a read-only reference to the element at the requested index.
     [[nodiscard]] const T& operator[](size_t idx) const noexcept
     {
         assert(idx < len);
         return ptr[idx];
     }
 
+    // Returns a reference to the first element.
     [[nodiscard]] T& front() noexcept
     {
         assert(len > 0);
         return ptr[0];
     }
 
+    // Returns a read-only reference to the first element.
     [[nodiscard]] const T& front() const noexcept
     {
         assert(len > 0);
         return ptr[0];
     }
 
+    // Returns a reference to the last element.
     [[nodiscard]] T& back() noexcept
     {
         assert(len > 0);
         return ptr[len - 1];
     }
 
+    // Returns a read-only reference to the last element.
     [[nodiscard]] const T& back() const noexcept
     {
         assert(len > 0);
         return ptr[len - 1];
     }
 
+    // Destroys all elements while keeping the current allocation.
     void clear() noexcept
     {
         destroy_range(0, len);
         len = 0;
     }
 
+    // Removes the last element.
     void pop_back() noexcept
     {
         assert(len > 0);
@@ -155,6 +187,7 @@ public:
         ptr[len].~T();
     }
 
+    // Ensures capacity for at least the requested number of elements.
     [[nodiscard]] bool reserve(size_t newCapacity) noexcept
     {
         if (newCapacity <= cap) {
@@ -163,6 +196,7 @@ public:
         return reallocate(newCapacity, false);
     }
 
+    // Shrinks the allocation to fit the current size.
     [[nodiscard]] bool shrink_to_fit() noexcept
     {
         if (len == cap) {
@@ -171,6 +205,7 @@ public:
         return reallocate(len, true);
     }
 
+    // Resizes the vector using default construction for new elements.
     [[nodiscard]] bool resize(size_t newLen) noexcept
     {
         static_assert(std::is_nothrow_default_constructible_v<T>,
@@ -203,6 +238,7 @@ public:
         return true;
     }
 
+    // Resizes the vector using copies of the provided fill value.
     [[nodiscard]] bool resize(size_t newLen, const T& fillValue) noexcept
     {
         static_assert(std::is_nothrow_copy_constructible_v<T>, "resize(n, value) requires T to be nothrow copy constructible.");
@@ -248,6 +284,7 @@ public:
         return true;
     }
 
+    // Appends a copy of the provided element.
     [[nodiscard]] bool push_back(const T& v) noexcept
     {
         static_assert(std::is_nothrow_copy_constructible_v<T>, "push_back(const T&) requires T to be nothrow copy constructible.");
@@ -276,6 +313,7 @@ public:
         return true;
     }
 
+    // Appends the provided element by move.
     [[nodiscard]] bool push_back(T&& v) noexcept
     {
         static_assert(std::is_nothrow_move_constructible_v<T>, "push_back(const T&) requires T to be nothrow move constructible.");
@@ -290,6 +328,7 @@ public:
         return true;
     }
 
+    // Constructs a new element in place at the end of the vector.
     template <class... Args>
     [[nodiscard]] bool emplace_back(Args&&... args) noexcept
     {
@@ -305,7 +344,7 @@ public:
         return true;
     }
 
-    // Optional: erase last N elements without realloc
+    // Shrinks the logical size without reallocating the storage.
     void resize_down(size_t newLen) noexcept
     {
         assert(newLen <= len);
@@ -428,17 +467,6 @@ private:
             len = 0;
             cap  = 0;
         }
-    }
-
-    void move_from(vector& other) noexcept
-    {
-        ptr = other.ptr;
-        len = other.len;
-        cap  = other.cap;
-        alloc = other.alloc;
-        other.ptr = nullptr;
-        other.len = 0;
-        other.cap  = 0;
     }
 
 private:

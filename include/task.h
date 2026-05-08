@@ -8,7 +8,7 @@
 
 // -----------------------------------------------------------------------------
 
-// Task manages a FreeRTOS task with synchronization mechanisms.
+// Stores the synchronization state used to manage a FreeRTOS task.
 typedef struct Task_s {
     RunOnce_t once;
     EventGroupHandle_t eg;
@@ -25,22 +25,23 @@ typedef void (*TaskRoutine_t)(Task_t *task, void *arg);
 extern "C" {
 #endif // __cplusplus
 
+// Initializes a task management state object.
 void taskInit(Task_t *task);
 
-// Creates a new task and waits until the continue event is signalled.
+// Creates a managed FreeRTOS task and waits for its startup handshake.
 esp_err_t taskCreate(Task_t *task, TaskRoutine_t fn, const char *pcName, uint32_t usStackDepth,
                      void * pvParameters, UBaseType_t uxPriority, BaseType_t xCoreID);
 
-// Call this function after the task copies the given parameters
+// Signals that the task copied its startup parameters and can continue.
 void taskSignalContinue(Task_t *task);
 
-// Checks if a task should quit.
+// Reports whether the managed task has been asked to stop.
 bool taskShouldQuit(Task_t *task);
 
+// Reports whether the managed task is currently running.
 bool taskIsRunning(Task_t *task);
 
-// Signals the task to end and waits until it quits.
-// This must not be called from the managed task itself.
+// Requests the managed task to stop and waits for it to exit.
 void taskJoin(Task_t *task);
 
 // Detaches the task from this Task_t instance and releases the event-group state

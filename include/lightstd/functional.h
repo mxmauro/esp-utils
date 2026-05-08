@@ -64,6 +64,108 @@ public:
     // standard C++) and silently route every callable through the heap.
     static_assert(SboSize > 0, "light_function: SboSize must be at least 1");
 
+    light_function() noexcept = default;
+    light_function(std::nullptr_t) noexcept {}
+
+    // Construct from any callable (lambda, functor, plain function pointer).
+    // SFINAE prevents this from shadowing the copy/move constructors.
+    // NOTE: a light_function with a *different* SboSize is not excluded —
+    // it will be stored as a nested callable (same as std::function wrapping
+    // another std::function). This is intentional but can be surprising;
+    // prefer assigning same-SboSize instances when possible.
+    template<
+        typename F,
+        typename = typename std::enable_if<!std::is_same<typename std::decay<F>::type, light_function>::value>::type
+    >
+    light_function(F&& f) noexcept
+    {
+        assign(std::forward<F>(f));
+    }
+
+    light_function(const light_function& other) noexcept
+    {
+        copy_from(other);
+    }
+
+    light_function(light_function&& other) noexcept
+    {
+        move_from(other);
+    }
+
+    ~light_function()
+    {
+        destroy();
+    }
+
+    light_function& operator=(const light_function& other) noexcept
+    {
+        if (this != &other) {
+            destroy();
+            copy_from(other);
+        }
+        return *this;
+    }
+
+    light_function& operator=(light_function&& other) noexcept
+    {
+        if (this != &other) {
+            destroy();
+            move_from(other);
+        }
+        return *this;
+    }
+
+    light_function& operator=(std::nullptr_t) noexcept
+    {
+        destroy();
+        return *this;
+    }
+
+    template<
+        typename F,
+        typename = typename std::enable_if<!std::is_same<typename std::decay<F>::type, light_function>::value>::type
+    >
+    light_function& operator=(F&& f) noexcept
+    {
+        destroy();
+        assign(std::forward<F>(f));
+        return *this;
+    }
+
+    // Invocation.
+    //
+    // Takes Args... by value, not Args&&...:
+    //   - Args&&... would refuse to bind lvalue arguments for value types,
+    //     e.g. light_function<int(int)> called as f(x) where x is an int
+    //     lvalue would fail to compile (can't bind int&& to int lvalue).
+    //   - Args... means the caller's argument is copied/moved once into the
+    //     parameter pack at the call site, then forwarded into invoke().
+    //     For move-only types (e.g. unique_ptr) the caller passes
+    //     std::move(x) explicitly, which move-constructs into args.
+    //   This matches std::function's calling convention exactly.
+    R operator()(Args... args) const
+    {
+        if (!m_vtable) {
+            // Calling an empty light_function is a hard programming error.
+            abort();
+        }
+        // const_cast: the stored callable may have mutable state (e.g. a
+        // mutable lambda). This mirrors std::function behaviour.
+        return m_vtable->invoke(const_cast<light_function*>(this)->active_storage(), std::forward<Args>(args)...);
+    }
+
+    explicit operator bool() const noexcept
+    {
+        return m_vtable != nullptr;
+    }
+
+    void swap(light_function& other) noexcept
+    {
+        light_function tmp(std::move(other));
+        other = std::move(*this);
+        *this = std::move(tmp);
+    }
+
 private:
     // Vtable: plain function pointers — no virtual dispatch, no RTTI.
     // alloc_size carries sizeof(F)
@@ -120,9 +222,9 @@ private:
     // Overloads prevent the compiler from instantiating the placement-new
     // branch with a type that doesn't fit (avoids -Wplacement-new / UB).
     template<typename Fd, typename F>
-    void do_store(F&& f, std::true_type /*fits in SBO*/) noexcept
+    void store(F&& f, std::true_type /*fits in SBO*/) noexcept
     {
-        // Noexcept is unconditional here: the static_asserts in do_assign
+        // Noexcept is unconditional here: the static_asserts in assign
         // guarantee Fd is both nothrow-copy and nothrow-move constructible,
         // so the placement-new cannot throw regardless of value category.
         m_heap = nullptr;
@@ -130,7 +232,7 @@ private:
     }
 
     template<typename Fd, typename F>
-    void do_store(F&& f, std::false_type /*too large — use heap*/)
+    void store(F&& f, std::false_type /*too large — use heap*/)
     {
         // Use std::nothrow: under -fno-exceptions the default ::operator new
         // may still invoke the new-handler or behave implementation-defined.
@@ -145,7 +247,7 @@ private:
     }
 
     template<typename F>
-    void do_assign(F&& f) noexcept
+    void assign(F&& f) noexcept
     {
         using Fd = typename std::decay<F>::type;
         using fits = std::integral_constant<bool, sizeof(Fd) <= SBO_SIZE && alignof(Fd) <= SBO_ALIGN>;
@@ -154,7 +256,7 @@ private:
         //
         // [1] Nothrow move constructor (required)
         //
-        //     do_move_from() and the move-assignment operator are marked
+        //     move_from() and the move-assignment operator are marked
         //     noexcept. In the SBO path they invoke Fd's move constructor at
         //     runtime through the vtable. If that move constructor throws,
         //     noexcept converts the exception into std::terminate with no
@@ -169,7 +271,7 @@ private:
 
         // [2] Nothrow copy constructor (required)
         //
-        //     do_copy_from() is called from the copy constructor and copy-
+        //     copy_from() is called from the copy constructor and copy-
         //     assignment operator, neither of which is noexcept. So a throwing
         //     copy constructor would propagate cleanly without hitting
         //     std::terminate. Why assert then?
@@ -208,11 +310,11 @@ private:
                       "light_function: stored callable must be nothrow copy constructible. "
                       "Capture heavy types by reference [&x] instead of by value [x].");
 
-        do_store<Fd>(std::forward<F>(f), fits{});
+        store<Fd>(std::forward<F>(f), fits{});
         m_vtable = vtable_for<Fd>();
     }
 
-    void do_destroy() noexcept
+    void destroy() noexcept
     {
         if (m_vtable) {
             m_vtable->destroy(active_storage());
@@ -224,7 +326,7 @@ private:
         }
     }
 
-    void do_copy_from(const light_function& other) noexcept
+    void copy_from(const light_function& other) noexcept
     {
         if (!other.m_vtable) {
             return;
@@ -237,7 +339,7 @@ private:
                 abort();
             }
 
-            // The static_asserts in do_assign guarantee the stored callable is
+            // The static_asserts in assign guarantee the stored callable is
             // nothrow copy constructible, so vtable->copy() below cannot throw
             // and this guard will never actually trigger. It is kept as a
             // defensive safety net in case the class is ever modified to relax
@@ -257,11 +359,11 @@ private:
             other.m_vtable->copy(m_sbo, other.m_sbo);
         }
 
-        // Set vtable last — consistent with do_assign ordering.
+        // Set vtable last — consistent with assign ordering.
         m_vtable = other.m_vtable;
     }
 
-    // do_move_from is noexcept because:
+    // move_from is noexcept because:
     //   • Heap path:  pointer steal only — no construction, no throw.
     //   • SBO path:   calls F's move constructor via move_destroy.
     //                 If that move constructor throws (pathological — well-
@@ -273,7 +375,7 @@ private:
     //                 If you need to store a type with a throwing move ctor,
     //                 wrap it in std::unique_ptr so the pointer (noexcept move)
     //                 is what gets stored.
-    void do_move_from(light_function& other) noexcept
+    void move_from(light_function& other) noexcept
     {
         if (!other.m_vtable) {
             return;
@@ -292,109 +394,6 @@ private:
 
         m_vtable       = other.m_vtable;
         other.m_vtable = nullptr;
-    }
-
-public:
-    light_function() noexcept = default;
-    light_function(std::nullptr_t) noexcept {}
-
-    // Construct from any callable (lambda, functor, plain function pointer).
-    // SFINAE prevents this from shadowing the copy/move constructors.
-    // NOTE: a light_function with a *different* SboSize is not excluded —
-    // it will be stored as a nested callable (same as std::function wrapping
-    // another std::function). This is intentional but can be surprising;
-    // prefer assigning same-SboSize instances when possible.
-    template<
-        typename F,
-        typename = typename std::enable_if<!std::is_same<typename std::decay<F>::type, light_function>::value>::type
-    >
-    light_function(F&& f) noexcept
-    {
-        do_assign(std::forward<F>(f));
-    }
-
-    light_function(const light_function& other) noexcept
-    {
-        do_copy_from(other);
-    }
-
-    light_function(light_function&& other) noexcept
-    {
-        do_move_from(other);
-    }
-
-    ~light_function()
-    {
-        do_destroy();
-    }
-
-    light_function& operator=(const light_function& other) noexcept
-    {
-        if (this != &other) {
-            do_destroy();
-            do_copy_from(other);
-        }
-        return *this;
-    }
-
-    light_function& operator=(light_function&& other) noexcept
-    {
-        if (this != &other) {
-            do_destroy();
-            do_move_from(other);
-        }
-        return *this;
-    }
-
-    light_function& operator=(std::nullptr_t) noexcept
-    {
-        do_destroy();
-        return *this;
-    }
-
-    template<
-        typename F,
-        typename = typename std::enable_if<!std::is_same<typename std::decay<F>::type, light_function>::value>::type
-    >
-    light_function& operator=(F&& f) noexcept
-    {
-        do_destroy();
-        do_assign(std::forward<F>(f));
-        return *this;
-    }
-
-    // Invocation.
-    //
-    // Takes Args... by value, not Args&&...:
-    //   - Args&&... would refuse to bind lvalue arguments for value types,
-    //     e.g. light_function<int(int)> called as f(x) where x is an int
-    //     lvalue would fail to compile (can't bind int&& to int lvalue).
-    //   - Args... means the caller's argument is copied/moved once into the
-    //     parameter pack at the call site, then forwarded into invoke().
-    //     For move-only types (e.g. unique_ptr) the caller passes
-    //     std::move(x) explicitly, which move-constructs into args.
-    //   This matches std::function's calling convention exactly.
-    R operator()(Args... args) const
-    {
-        if (!m_vtable) {
-            // Calling an empty light_function is a hard programming error.
-            abort();
-        }
-        // const_cast: the stored callable may have mutable state (e.g. a
-        // mutable lambda). This mirrors std::function behaviour.
-        return m_vtable->invoke(const_cast<light_function*>(this)->active_storage(), std::forward<Args>(args)...);
-    }
-
-    explicit operator bool() const noexcept
-    {
-        return m_vtable != nullptr;
-    }
-
-    void swap(light_function& other) noexcept
-    {
-        light_function tmp(std::move(other));
-        other = std::move(*this);
-        *this = std::move(tmp);
     }
 };
 

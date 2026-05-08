@@ -19,12 +19,14 @@ public:
     using iterator        = char*;
     using const_iterator  = const char*;
 
+    // Creates an empty string using the provided allocator or the default one.
     string(IAllocator *_alloc = nullptr) noexcept
     {
         alloc = _alloc ? _alloc : IAllocator::getDefault();
     }
 
     string(const string&) = delete;
+    // Transfers ownership of the string buffer.
     string(string&& other) noexcept : ptr(other.ptr), len(other.len), cap(other.cap), alloc(other.alloc)
     {
         other.ptr = nullptr;
@@ -32,6 +34,7 @@ public:
         other.cap = 0;
     }
 
+    // Releases the owned character buffer.
     ~string()
     {
         if (ptr) {
@@ -43,10 +46,15 @@ public:
     string& operator=(string&& other) noexcept
     {
         if (this != &other) {
+            if (ptr) {
+                alloc->deallocate(ptr);
+            }
+
             ptr = other.ptr;
             len = other.len;
             cap = other.cap;
             alloc = other.alloc;
+
             other.ptr = nullptr;
             other.len = 0;
             other.cap = 0;
@@ -54,73 +62,87 @@ public:
         return *this;
     }
 
+    // Returns the number of characters excluding the trailing nul.
     [[nodiscard]] size_t length() const noexcept
     {
         return len;
     }
 
+    // Returns the allocated character capacity excluding the trailing nul.
     [[nodiscard]] size_t capacity() const noexcept
     {
         return cap;
     }
 
+    // Reports whether the string contains no characters.
     [[nodiscard]] bool empty() const noexcept
     {
         return len == 0;
     }
 
+    // Returns mutable access to the contiguous character buffer.
     char* data() noexcept
     {
         assert(ptr);
         return ptr;
     }
 
+    // Returns read-only access to the contiguous character buffer.
     const char* data() const noexcept
     {
         return c_str();
     }
 
+    // Returns a nul-terminated view of the string contents.
     const char* c_str() const noexcept
     {
         static const char empty[1] = "";
         return ptr ? ptr : empty;
     }
 
+    // Implicitly exposes the string as a nul-terminated C string.
     operator const char*() const noexcept
     {
         return c_str();
     }
 
+    // Returns an iterator to the first character.
     iterator begin() noexcept
     {
         return ptr;
     }
 
+    // Returns a const iterator to the first character.
     const_iterator begin() const noexcept
     {
         return ptr;
     }
 
+    // Returns a const iterator to the first character.
     const_iterator cbegin() const noexcept
     {
         return ptr;
     }
 
+    // Returns an iterator one past the last character.
     iterator end() noexcept
     {
         return ptr + len;
     }
 
+    // Returns a const iterator one past the last character.
     const_iterator end() const noexcept
     {
         return ptr + len;
     }
 
+    // Returns a const iterator one past the last character.
     const_iterator cend() const noexcept
     {
         return ptr + len;
     }
 
+    // Returns a reference to the character at the requested index.
     [[nodiscard]] char& operator[](size_t idx) noexcept
     {
         assert(ptr);
@@ -128,6 +150,7 @@ public:
         return ptr[idx]; // WARNING: no bounds check
     }
 
+    // Returns a read-only reference to the character at the requested index.
     [[nodiscard]] const char& operator[](size_t idx) const noexcept
     {
         assert(ptr);
@@ -135,16 +158,19 @@ public:
         return ptr[idx];
     }
 
+    // Reports whether the string contains at least one character.
     explicit operator bool() const noexcept
     {
         return len != 0;
     }
 
+    // Reports whether the string is empty.
     bool operator!() const noexcept
     {
         return len == 0;
     }
 
+    // Removes all characters while keeping the current allocation.
     void clear() noexcept
     {
         len = 0;
@@ -153,6 +179,7 @@ public:
         }
     }
 
+    // Appends a nul-terminated string.
     bool append(const char* src) noexcept
     {
         size_t len;
@@ -164,6 +191,7 @@ public:
         return append(src, len);
     }
 
+    // Appends a byte range without requiring a trailing nul.
     bool append(const char* src, size_t srcLen) noexcept
     {
         if ((!src) || srcLen == 0) {
@@ -180,12 +208,13 @@ public:
         return true;
     }
 
+    // Appends a single character.
     bool push_back(char c) noexcept
     {
         return append(&c, 1);
     }
 
-    // Reserve space for at least newCapacity characters (excluding '\0')
+    // Ensures capacity for at least the requested character count.
     [[nodiscard]] bool reserve(size_t newCapacity) noexcept
     {
         char* newPtr;
@@ -212,6 +241,7 @@ public:
         return true;
     }
 
+    // Resizes the string and preserves nul termination.
     [[nodiscard]] bool resize(size_t newLen) noexcept
     {
         if (newLen > cap) {

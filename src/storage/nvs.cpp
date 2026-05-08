@@ -9,10 +9,6 @@ static bool volatile nvsInitialized = false;
 
 // -----------------------------------------------------------------------------
 
-static esp_err_t convertError(esp_err_t err);
-
-// -----------------------------------------------------------------------------
-
 esp_err_t nvsInit()
 {
     AutoMutex lock(nvsInitMtx);
@@ -42,12 +38,41 @@ NVSStorage::NVSStorage(const char *_nameSpace, const char *_partition) noexcept
     partition = _partition ? _partition : NVS_DEFAULT_PART_NAME;
 }
 
+NVSStorage::NVSStorage(NVSStorage&& other) noexcept : nameSpace(other.nameSpace), partition(other.partition), handle(other.handle),
+                                                      readOnlyMode(other.readOnlyMode)
+{
+    other.nameSpace = nullptr;
+    other.partition = nullptr;
+    other.handle = 0;
+    other.readOnlyMode = false;
+}
+
 NVSStorage::~NVSStorage() noexcept
 {
     if (handle != 0) {
         nvs_close(handle);
         handle = 0;
     }
+}
+
+NVSStorage& NVSStorage::operator=(NVSStorage&& other) noexcept
+{
+    if (this != &other) {
+        if (handle != 0) {
+            nvs_close(handle);
+        }
+
+        nameSpace = other.nameSpace;
+        partition = other.partition;
+        handle = other.handle;
+        readOnlyMode = other.readOnlyMode;
+
+        other.nameSpace = nullptr;
+        other.partition = nullptr;
+        other.handle = 0;
+        other.readOnlyMode = false;
+    }
+    return *this;
 }
 
 esp_err_t NVSStorage::readStr(const char *key, lightstd::string &str) noexcept
@@ -268,6 +293,17 @@ void NVSStorage::eraseAll() noexcept
     nvs_flash_init_partition(partition);
 }
 
+esp_err_t NVSStorage::commit() noexcept
+{
+    if (handle == 0) {
+        return ESP_ERR_INVALID_STATE ;
+    }
+    if (readOnlyMode) {
+        return ESP_OK;
+    }
+    return convertError(nvs_commit(handle));
+}
+
 esp_err_t NVSStorage::open(bool readOnly) noexcept
 {
     esp_err_t err;
@@ -305,12 +341,17 @@ esp_err_t NVSStorage::init() noexcept
     return nvs_flash_init_partition(partition);
 }
 
-// -----------------------------------------------------------------------------
-
-static esp_err_t convertError(esp_err_t err)
+esp_err_t NVSStorage::convertError(esp_err_t err)
 {
     if (err == ESP_ERR_NVS_NOT_FOUND) {
         return ESP_ERR_NOT_FOUND;
+    }
+    if (err == ESP_ERR_NVS_INVALID_STATE) {
+        if (handle != 0) {
+            nvs_close(handle);
+            handle = 0;
+        }
+        return ESP_ERR_INVALID_STATE;
     }
     return err;
 }

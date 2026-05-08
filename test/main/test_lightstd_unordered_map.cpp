@@ -48,3 +48,35 @@ TEST_CASE("lightstd static_hash_map insert update erase", "lightstd unordered_ma
 
     map.done();
 }
+
+TEST_CASE("lightstd static_hash_map const iterator and empty begin", "lightstd unordered_map")
+{
+    static_hash_map<int, int, ConstantHash> emptyMap;
+    size_t iterated = 0;
+
+    for (auto it = emptyMap.begin(); it != emptyMap.end(); ++it) {
+        iterated += 1;
+    }
+    TEST_ASSERT_EQUAL_UINT32(0, iterated);
+
+    static_hash_map<int, int, ConstantHash> map;
+    TEST_ASSERT_EQUAL(ESP_OK, map.init(8));
+    TEST_ASSERT_NOT_NULL(map.insert(3, 300));
+    TEST_ASSERT_NOT_NULL(map.insert(7, 700));
+
+    const static_hash_map<int, int, ConstantHash>& constMap = map;
+    int sum = 0;
+    size_t count = 0;
+
+    for (auto it = constMap.begin(); it != constMap.end(); ++it) {
+        auto entry = *it;
+
+        sum += entry.key + entry.value;
+        count += 1;
+    }
+
+    TEST_ASSERT_EQUAL_UINT32(2, count);
+    TEST_ASSERT_EQUAL(1010, sum);
+
+    map.done();
+}

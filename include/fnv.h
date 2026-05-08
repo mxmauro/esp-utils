@@ -11,7 +11,7 @@
 extern "C" {
 #endif // __cplusplus
 
-// FNV-1a 32-bit hash function
+// Computes a 32-bit FNV-1a hash for a byte sequence.
 uint32_t fnv1a32(const void *data, size_t len, uint32_t initialHash = FNV1A32_INITIAL_HASH);
 
 #ifdef __cplusplus
