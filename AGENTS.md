@@ -3,8 +3,13 @@
 ## Scope
 - These instructions apply to the whole repository.
 - Treat this as an ESP-IDF component first. Preserve the existing split between public headers in `include/`, implementation in `src/`, and test code in `test/`.
-- Make the smallest change that solves the task. Do not reformat unrelated code.
 - Do not touch unrelated user changes. This repository may be dirty.
+
+## Working principles
+- Think before coding. State assumptions explicitly, surface ambiguity or tradeoffs instead of picking silently, and ask for clarification when requirements or nearby code are unclear.
+- Simplicity first. Make the smallest change that solves the task. Do not add speculative abstractions, configurability, or behavior that was not requested.
+- Surgical changes. Keep diffs limited to the requested behavior, tests, and directly required documentation. Do not reformat unrelated code or fix adjacent issues unless they block the task. Remove only imports, variables, or helpers that your change made unused.
+- Goal-driven execution. Define the verification target before editing, prefer focused tests or checks that prove the changed behavior, and broaden validation only as the change scope requires.
 
 ## File format
 - Use LF line endings for text files. The repository enforces this in `.editorconfig`.
@@ -53,7 +58,6 @@
 - Keep public headers focused on the exported API. Do not leak internal implementation details unless the task requires an API change.
 - Match the surrounding naming style instead of renaming identifiers for taste.
 - Extend or update tests in `test/main/` when behavior changes, especially for synchronization, storage, conversion, or buffer logic.
-- Do not fix unrelated bugs while editing unless they block the requested change.
 
 ## Build files and docs
 - In `CMakeLists.txt`, preserve the current style: lowercase commands, 4-space indentation, and grouped argument lists.
@@ -61,7 +65,5 @@
 - Keep Markdown concise and consistent with the repository's current tone.
 
 ## Editing rules for agents
-- Before changing a file, read the nearby code and match its local style.
-- Prefer focused patches over broad cleanup.
 - Preserve line endings, indentation, and spacing exactly in untouched regions.
 - If a task creates tension between style and security, prioritize security while keeping the diff as small as possible.

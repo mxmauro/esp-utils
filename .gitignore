@@ -1,7 +1,8 @@
 *.~*
 .DS_Store
 .cache
-.vscode
+.vscode/*
+!.vscode/settings.json
 build
 dist
 managed_components

@@ -1,0 +1,7 @@
+{
+	"editor.rulers": [{
+		"column": 140,
+		"color": "#800000"
+	}],
+	"editor.guides.indentation": true
+}

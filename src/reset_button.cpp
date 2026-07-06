@@ -50,7 +50,7 @@ void setupResetButton(gpio_num_t gpioPin, ResetButtonPressedHandler_t _handler, 
 
     // Configure button GPIO
     memset(&gpioConfig, 0, sizeof(gpioConfig));
-    gpioConfig.pin_bit_mask = 1ULL << (int)resetButtonGpioPin,
+    gpioConfig.pin_bit_mask = 1ULL << (int)resetButtonGpioPin;
     gpioConfig.mode         = GPIO_MODE_INPUT;
     gpioConfig.pull_up_en   = GPIO_PULLUP_ENABLE;
     gpioConfig.pull_down_en = GPIO_PULLDOWN_DISABLE;
@@ -59,7 +59,7 @@ void setupResetButton(gpio_num_t gpioPin, ResetButtonPressedHandler_t _handler, 
 
     // Install ISR and attach handler
     ESP_ERROR_CHECK(gpio_install_isr_service(0));
-    ESP_ERROR_CHECK(gpio_isr_handler_add(resetButtonGpioPin, onButtonISR, NULL));
+    ESP_ERROR_CHECK(gpio_isr_handler_add(resetButtonGpioPin, onButtonISR, nullptr));
 
     ESP_LOGI(TAG, "Reset button controller sucessfully initialized.");
 }
