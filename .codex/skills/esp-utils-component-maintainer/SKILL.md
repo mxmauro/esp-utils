@@ -1,3 +1,7 @@
+---
+name: esp-utils-component-maintainer
+description: Use this skill when changing or adding public component APIs in this repository.
+---
 # esp-utils Component Maintainer
 
 Use this skill when changing or adding public component APIs in this repository.

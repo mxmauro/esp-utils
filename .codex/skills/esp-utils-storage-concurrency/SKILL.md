@@ -1,3 +1,7 @@
+---
+name: esp-utils-storage-concurrency
+description: Use this skill when editing code that touches NVS, mutexes, task lifetime, rundown protection, or one-time initialization.
+---
 # esp-utils Storage And Concurrency Hardening
 
 Use this skill when editing code that touches NVS, mutexes, task lifetime, rundown protection, or one-time initialization.

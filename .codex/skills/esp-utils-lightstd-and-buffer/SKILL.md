@@ -1,3 +1,7 @@
+---
+name: esp-utils-lightstd-and-buffer
+description: Use this skill when extending the lightweight containers, allocator wrappers, growable buffer helpers, or conversion/hash utilities.
+---
 # esp-utils Lightstd And Buffer Extensions
 
 Use this skill when extending the lightweight containers, allocator wrappers, growable buffer helpers, or conversion/hash utilities.
