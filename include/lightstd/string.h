@@ -6,7 +6,8 @@
 
 #include "allocator.h"
 #include <assert.h>
-#include <cstring>
+#include <string.h>
+#include <stdint.h>
 
 // -----------------------------------------------------------------------------
 
@@ -16,11 +17,11 @@ namespace lightstd {
 class string
 {
 public:
-    using iterator        = char*;
-    using const_iterator  = const char*;
+    using iterator = char*;
+    using const_iterator = const char*;
 
     // Creates an empty string using the provided allocator or the default one.
-    string(IAllocator *_alloc = nullptr) noexcept
+    string(IAllocator* _alloc = nullptr) noexcept
     {
         alloc = _alloc ? _alloc : IAllocator::getDefault();
     }
@@ -37,7 +38,8 @@ public:
     // Releases the owned character buffer.
     ~string()
     {
-        if (ptr) {
+        if (ptr)
+        {
             alloc->deallocate(ptr);
         }
     }
@@ -45,8 +47,10 @@ public:
     string& operator=(const string&) = delete;
     string& operator=(string&& other) noexcept
     {
-        if (this != &other) {
-            if (ptr) {
+        if (this != &other)
+        {
+            if (ptr)
+            {
                 alloc->deallocate(ptr);
             }
 
@@ -127,19 +131,19 @@ public:
     // Returns an iterator one past the last character.
     iterator end() noexcept
     {
-        return ptr + len;
+        return ptr ? (ptr + len) : nullptr;
     }
 
     // Returns a const iterator one past the last character.
     const_iterator end() const noexcept
     {
-        return ptr + len;
+        return ptr ? (ptr + len) : nullptr;
     }
 
     // Returns a const iterator one past the last character.
     const_iterator cend() const noexcept
     {
-        return ptr + len;
+        return ptr ? (ptr + len) : nullptr;
     }
 
     // Returns a reference to the character at the requested index.
@@ -174,7 +178,8 @@ public:
     void clear() noexcept
     {
         len = 0;
-        if (ptr) {
+        if (ptr)
+        {
             ptr[0] = '\0';
         }
     }
@@ -182,27 +187,38 @@ public:
     // Appends a nul-terminated string.
     bool append(const char* src) noexcept
     {
-        size_t len;
-
-        if (!src) {
+        if (!src)
+        {
             return true;
         }
-        for (len = 0; src[len] != '\0'; ++len);
-        return append(src, len);
+        return append(src, strlen(src));
     }
 
     // Appends a byte range without requiring a trailing nul.
     bool append(const char* src, size_t srcLen) noexcept
     {
-        if ((!src) || srcLen == 0) {
+        bool   aliases;
+        size_t aliasOffset;
+
+        if ((!src) || srcLen == 0)
+        {
             return true;
         }
 
-        if (!reserve(len + srcLen)) {
+        if (srcLen > SIZE_MAX - len)
+        {
             return false;
         }
 
-        memcpy(ptr + len, src, srcLen);
+        aliases = ptr && src >= ptr && src <= ptr + len;
+        aliasOffset = aliases ? static_cast<size_t>(src - ptr) : 0;
+
+        if (!reserve(len + srcLen))
+        {
+            return false;
+        }
+
+        memmove(ptr + len, aliases ? ptr + aliasOffset : src, srcLen);
         len += srcLen;
         ptr[len] = '\0';
         return true;
@@ -219,20 +235,28 @@ public:
     {
         char* newPtr;
 
-        if (newCapacity <= cap) {
+        if (newCapacity <= cap)
+        {
             return true;
+        }
+        if (newCapacity == SIZE_MAX)
+        {
+            return false;
         }
 
         // Allocate
-        newPtr = (char *)alloc->allocate(newCapacity + 1); // extra room for nul character
-        if (!newPtr) {
+        newPtr = static_cast<char*>(alloc->allocate(newCapacity + 1)); // extra room for nul character
+        if (!newPtr)
+        {
             return false;
         }
-        if (ptr) {
+        if (ptr)
+        {
             memcpy(newPtr, ptr, len);
             alloc->deallocate(ptr);
         }
-        else {
+        else
+        {
             len = 0;
         }
         ptr = newPtr;
@@ -244,30 +268,35 @@ public:
     // Resizes the string and preserves nul termination.
     [[nodiscard]] bool resize(size_t newLen) noexcept
     {
-        if (newLen > cap) {
-            if (!reserve(newLen)) {
+        if (newLen > cap)
+        {
+            if (!reserve(newLen))
+            {
                 return false;
             }
         }
-        else if (cap == 0) {
+        else if (cap == 0)
+        {
             // Try to allocate some room if the string is empty
             // regardless we are not adding anything to the string
-            if (!reserve(16)) {
+            if (!reserve(16))
+            {
                 return false;
             }
         }
         len = newLen;
-        if (ptr) {
+        if (ptr)
+        {
             ptr[len] = '\0';
         }
         return true;
     }
 
 private:
-    char* ptr{nullptr};
-    size_t len{0};
-    size_t cap{0};
-    IAllocator *alloc{nullptr};
+    char*       ptr{nullptr};
+    size_t      len{0};
+    size_t      cap{0};
+    IAllocator* alloc{nullptr};
 };
 
 } // namespace lightstd

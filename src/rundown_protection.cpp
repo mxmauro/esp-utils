@@ -1,4 +1,5 @@
 #include "rundown_protection.h"
+#include <freertos/task.h>
 #include <assert.h>
 #include <string.h>
 
@@ -8,42 +9,54 @@
 
 // -----------------------------------------------------------------------------
 
-static inline EventGroupHandle_t rpEnsureEventGroup(RundownProtection_t *rp);
+static inline EventGroupHandle_t rpEnsureEventGroup(RundownProtection_t* rp);
 
 // -----------------------------------------------------------------------------
 
-void rundownProtInit(RundownProtection_t *rp)
+void rundownProtInit(RundownProtection_t* rp)
 {
     EventGroupHandle_t eg;
 
     eg = xEventGroupCreateStatic(&rp->eventGroupBuffer);
     atomic_store_explicit(&rp->eg, eg, memory_order_release);
     atomic_store_explicit(&rp->counter, 0, memory_order_relaxed);
+    atomic_store_explicit(&rp->waiters, 0, memory_order_relaxed);
 }
 
-void rundownProtDestroy(RundownProtection_t *rp)
+void rundownProtDestroy(RundownProtection_t* rp)
 {
     EventGroupHandle_t eg;
 
+    // A waiter performs no further accesses after it decrements waiters.
+    while (atomic_load_explicit(&rp->waiters, memory_order_seq_cst) != 0)
+    {
+        vTaskDelay(1);
+    }
+
     eg = atomic_exchange_explicit(&rp->eg, nullptr, memory_order_acq_rel);
-    if (eg) {
+    if (eg)
+    {
         vEventGroupDelete(eg);
     }
     atomic_store_explicit(&rp->counter, 0, memory_order_relaxed);
+    atomic_store_explicit(&rp->waiters, 0, memory_order_relaxed);
     memset(&rp->eventGroupBuffer, 0, sizeof(rp->eventGroupBuffer));
 }
 
-bool rundownProtAcquire(RundownProtection_t *rp)
+bool rundownProtAcquire(RundownProtection_t* rp)
 {
     uint32_t val, desired;
 
     val = atomic_load_explicit(&rp->counter, memory_order_acquire);
-    for (;;) {
+    for (;;)
+    {
         // If a rundown is in progress, cancel acquisition
-        if (val & RUNDOWN_IS_ACTIVE) {
+        if (val & RUNDOWN_IS_ACTIVE)
+        {
             return false;
         }
-        if ((val & RUNDOWN_REF_MASK) == RUNDOWN_REF_MASK) {
+        if ((val & RUNDOWN_REF_MASK) == RUNDOWN_REF_MASK)
+        {
             return false; // overflow guard
         }
 
@@ -56,25 +69,28 @@ bool rundownProtAcquire(RundownProtection_t *rp)
     }
 }
 
-void rundownProtRelease(RundownProtection_t *rp)
+void rundownProtRelease(RundownProtection_t* rp)
 {
     uint32_t val, desired, ref;
 
     val = atomic_load_explicit(&rp->counter, memory_order_acquire);
-    for (;;) {
+    for (;;)
+    {
         ref = val & RUNDOWN_REF_MASK;
-        if (ref == 0) {
+        if (ref == 0)
+        {
             assert(false); // assert / error: release without acquire
             return;
         }
 
         // Decrement usage counter but keep the rundown active flag if present
-        desired  = (val & RUNDOWN_IS_ACTIVE) | (ref - 1);
+        desired = (val & RUNDOWN_IS_ACTIVE) | (ref - 1);
 
         if (atomic_compare_exchange_strong_explicit(&rp->counter, &val, desired, memory_order_release, memory_order_acquire))
         {
             // If a wait is in progress and the last reference is being released, complete the wait
-            if (desired == RUNDOWN_IS_ACTIVE) {
+            if (desired == RUNDOWN_IS_ACTIVE)
+            {
                 EventGroupHandle_t eg = atomic_load_explicit(&rp->eg, memory_order_acquire);
                 xEventGroupSetBits(eg, RUNDOWN_DONE_BIT);
             }
@@ -83,24 +99,27 @@ void rundownProtRelease(RundownProtection_t *rp)
     }
 }
 
-void rundownProtWait(RundownProtection_t *rp)
+void rundownProtWait(RundownProtection_t* rp)
 {
     EventGroupHandle_t eg;
-    uint32_t val, desired, ref;
+    uint32_t           val, desired, ref;
+
+    atomic_fetch_add_explicit(&rp->waiters, 1, memory_order_seq_cst);
 
     // Lazy initialization of the event group.
     eg = rpEnsureEventGroup(rp);
 
     // Get rundown active flag
     val = atomic_load_explicit(&rp->counter, memory_order_acquire);
-    for (;;) {
+    for (;;)
+    {
         // Check if wait was already called (concurrent waits are also allowed)
-        if (val & RUNDOWN_IS_ACTIVE) {
+        if (val & RUNDOWN_IS_ACTIVE)
+        {
             // Wait until rundown completes
             xEventGroupWaitBits(eg, RUNDOWN_DONE_BIT, pdFALSE, pdTRUE, portMAX_DELAY);
 
-            // Done
-            return;
+            break;
         }
 
         // Set rundown active flag
@@ -109,38 +128,44 @@ void rundownProtWait(RundownProtection_t *rp)
         {
             ref = val & RUNDOWN_REF_MASK;
 
-            if (ref == 0) {
+            if (ref == 0)
+            {
                 xEventGroupSetBits(eg, RUNDOWN_DONE_BIT);
             }
-            else {
+            else
+            {
                 // Wait until the last holder releases its reference.
                 xEventGroupWaitBits(eg, RUNDOWN_DONE_BIT, pdFALSE, pdTRUE, portMAX_DELAY);
             }
 
-            // Done
-            return;
+            break;
         }
     }
+
+    uint32_t previous = atomic_fetch_sub_explicit(&rp->waiters, 1, memory_order_seq_cst);
+    assert(previous > 0);
 }
 
 // -----------------------------------------------------------------------------
 
-static inline EventGroupHandle_t rpEnsureEventGroup(RundownProtection_t *rp)
+static inline EventGroupHandle_t rpEnsureEventGroup(RundownProtection_t* rp)
 {
     // Choose an invalid handle value as a sentinel.
-    // FreeRTOS handles are aligned pointers; (EventGroupHandle_t)1 should never be valid.
-    static const EventGroupHandle_t CREATING = (EventGroupHandle_t)(uintptr_t)1;
-    EventGroupHandle_t eg;
-    EventGroupHandle_t expected;
+    // FreeRTOS handles are aligned pointers; address 1 should never be valid.
+    static const EventGroupHandle_t CREATING = reinterpret_cast<EventGroupHandle_t>(static_cast<uintptr_t>(1));
+    EventGroupHandle_t              eg;
+    EventGroupHandle_t              expected;
 
     eg = atomic_load_explicit(&rp->eg, memory_order_acquire);
-    if (eg && eg != CREATING) {
+    if (eg && eg != CREATING)
+    {
         return eg;
     }
 
     // Try to become the creator
     expected = nullptr;
-    if (atomic_compare_exchange_strong_explicit(&rp->eg, &expected, CREATING, memory_order_acq_rel, memory_order_acquire)) {
+    if (atomic_compare_exchange_strong_explicit(&rp->eg, &expected, CREATING, memory_order_acq_rel, memory_order_acquire))
+    {
         // We won: create using the per-object static buffer
         eg = xEventGroupCreateStatic(&rp->eventGroupBuffer);
         atomic_store_explicit(&rp->eg, eg, memory_order_release);
@@ -148,12 +173,15 @@ static inline EventGroupHandle_t rpEnsureEventGroup(RundownProtection_t *rp)
     }
 
     // Someone else is creating (or already created). Wait until it becomes non-sentinel.
-    for (;;) {
+    for (;;)
+    {
         eg = atomic_load_explicit(&rp->eg, memory_order_acquire);
-        if (eg && eg != CREATING) {
+        if (eg && eg != CREATING)
+        {
             return eg;
         }
-        taskYIELD();
+        // Yielding does not let a lower-priority creator run. Delay briefly so
+        // that task can publish the newly created event group.
+        vTaskDelay(1);
     }
 }
-

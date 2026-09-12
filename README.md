@@ -1,6 +1,7 @@
 # esp-utils
 
-`esp-utils` is a reusable [ESP-IDF](https://github.com/espressif/esp-idf) component that provides abstractions for common tasks including hardware control, data structures, synchronization primitives, and storage management.
+`esp-utils` is a reusable [ESP-IDF](https://github.com/espressif/esp-idf) component that provides abstractions for common tasks including
+hardware control, data structures, synchronization primitives, and storage management.
 
 ## Features
 
@@ -16,13 +17,13 @@
 
 | Component            | Description                                                        |
 |----------------------|--------------------------------------------------------------------|
-| `onboard_led`        | Control built-in LED with PWM support                              |
+| `onboard_led`        | Control built-in LED                                               |
 | `reset_button`       | Handle reset button events and debouncing                          |
 | `rundown_protection` | Graceful shutdown coordination mechanism                           |
 | `run_once`           | Execute code blocks exactly once                                   |
 | `growable_buffer`    | Dynamic memory buffer with automatic resizing                      |
 | `task`               | Simplified FreeRTOS task wrapper                                   |
-| `time`               | Timing and delay utilities                                         |
+| `time`               | Millisecond uptime helper                                          |
 | `fnv`                | FNV hash function implementation                                   |
 | `convert`            | Type and data conversion helpers                                   |
 | `storage`            | NVS read/write abstractions                                        |
@@ -38,7 +39,7 @@ Then append the desired component like the following example:
 dependencies:
   mxmauro/esp_utils:
     git: https://github.com/mxmauro/esp-utils.git
-    version: "*"   # You can also specify a tag, branch or commit hash
+    version: "v0.4.0"   # You can also specify a branch or commit hash
 ```
 
 Save the changes and run the following command:

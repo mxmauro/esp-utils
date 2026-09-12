@@ -19,7 +19,7 @@ class NVSStorage final : public IStorage
 {
 public:
     // Opens an NVS-backed storage view for the selected namespace and partition.
-    NVSStorage(const char *nameSpace = nullptr, const char *partition = nullptr) noexcept;
+    NVSStorage(const char* nameSpace = nullptr, const char* partition = nullptr) noexcept;
     NVSStorage(const NVSStorage&) = delete;
     // Transfers ownership of the underlying NVS handle.
     NVSStorage(NVSStorage&& other) noexcept;
@@ -31,22 +31,22 @@ public:
     NVSStorage& operator=(NVSStorage&& other) noexcept;
 
     // Reads a string value from NVS.
-    esp_err_t readStr(const char *key, lightstd::string &str) noexcept;
+    esp_err_t readStr(const char* key, lightstd::string& str) noexcept;
     // Writes a string value to NVS.
-    esp_err_t writeStr(const char *key, const char *value) noexcept;
+    esp_err_t writeStr(const char* key, const char* value) noexcept;
 
     // Reads a blob value from NVS.
-    esp_err_t readBlob(const char *key, lightstd::vector<uint8_t> &blob) noexcept;
+    esp_err_t readBlob(const char* key, lightstd::vector<uint8_t>& blob) noexcept;
     // Writes a blob value to NVS.
-    esp_err_t writeBlob(const char *key, const void *value, size_t valueLen) noexcept;
+    esp_err_t writeBlob(const char* key, const void* value, size_t valueLen) noexcept;
 
     // Reads a 32-bit integer value from NVS.
-    esp_err_t readInt(const char *key, int32_t *pValue) noexcept;
+    esp_err_t readInt(const char* key, int32_t* pValue) noexcept;
     // Writes a 32-bit integer value to NVS.
-    esp_err_t writeInt(const char *key, int32_t value) noexcept;
+    esp_err_t writeInt(const char* key, int32_t value) noexcept;
 
     // Erases a single key from NVS.
-    esp_err_t erase(const char *key) noexcept;
+    esp_err_t erase(const char* key) noexcept;
     // Erases and reinitializes the whole NVS partition.
     void eraseAll() noexcept;
 
@@ -60,10 +60,10 @@ private:
     esp_err_t convertError(esp_err_t err) noexcept;
 
 private:
-    const char *nameSpace{nullptr};
-    const char *partition{nullptr};
+    const char*  nameSpace{nullptr};
+    const char*  partition{nullptr};
     nvs_handle_t handle{0};
-    bool readOnlyMode{false};
+    bool         readOnlyMode{false};
 };
 
 #endif // __cplusplus

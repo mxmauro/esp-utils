@@ -1,5 +1,5 @@
 #include "lightstd/allocator.h"
-#include <memory.h>
+#include <stdlib.h>
 
 using namespace lightstd;
 

@@ -34,7 +34,7 @@ Use this skill when changing or adding public component APIs in this repository.
 ## Working rules
 
 1. Keep the diff narrow. Do not reformat unrelated files.
-2. Preserve the mixed C/C++ API style already used here.
+2. Preserve public API compatibility and established names.
 3. If behavior changes, update or add tests in `test/main/`.
 4. If a new `.cpp` implementation file is added, register it in the root `CMakeLists.txt`.
 5. If a new public capability is user-facing, update `README.md` only if the change is material.
@@ -44,10 +44,9 @@ Use this skill when changing or adding public component APIs in this repository.
 
 1. Confirm whether the change belongs in a public header or should stay internal.
 2. Mirror naming and qualifiers from neighboring APIs.
-3. Check include ordering against the local file style.
-4. Validate null, size, and state inputs early when the surrounding code does.
-5. Keep object state reusable after failure.
-6. Add or adjust Unity coverage for success and failure paths.
+3. Validate null, size, and state inputs early when the surrounding code does.
+4. Keep object state reusable after failure.
+5. Add or adjust Unity coverage for success and failure paths.
 
 ## Validation
 

@@ -8,5 +8,5 @@ set(srcs "main.cpp"
 
 idf_component_register(SRCS ${srcs}
                        INCLUDE_DIRS "."
-                       REQUIRES unity
+                       REQUIRES unity esp_timer
                        WHOLE_ARCHIVE)

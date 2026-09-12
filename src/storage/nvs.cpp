@@ -13,15 +13,18 @@ esp_err_t nvsInit()
 {
     AutoMutex lock(nvsInitMtx);
 
-    if (!nvsInitialized) {
+    if (!nvsInitialized)
+    {
         esp_err_t err;
 
         err = nvs_flash_init();
-        if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND)
+        {
             nvs_flash_erase();
             err = nvs_flash_init();
         }
-        if (err != ESP_OK) {
+        if (err != ESP_OK)
+        {
             return err;
         }
 
@@ -32,14 +35,14 @@ esp_err_t nvsInit()
     return ESP_OK;
 }
 
-NVSStorage::NVSStorage(const char *_nameSpace, const char *_partition) noexcept
+NVSStorage::NVSStorage(const char* _nameSpace, const char* _partition) noexcept
 {
     nameSpace = _nameSpace ? _nameSpace : "storage";
     partition = _partition ? _partition : NVS_DEFAULT_PART_NAME;
 }
 
-NVSStorage::NVSStorage(NVSStorage&& other) noexcept : nameSpace(other.nameSpace), partition(other.partition), handle(other.handle),
-                                                      readOnlyMode(other.readOnlyMode)
+NVSStorage::NVSStorage(NVSStorage&& other) noexcept
+    : nameSpace(other.nameSpace), partition(other.partition), handle(other.handle), readOnlyMode(other.readOnlyMode)
 {
     other.nameSpace = nullptr;
     other.partition = nullptr;
@@ -49,7 +52,8 @@ NVSStorage::NVSStorage(NVSStorage&& other) noexcept : nameSpace(other.nameSpace)
 
 NVSStorage::~NVSStorage() noexcept
 {
-    if (handle != 0) {
+    if (handle != 0)
+    {
         nvs_close(handle);
         handle = 0;
     }
@@ -57,8 +61,10 @@ NVSStorage::~NVSStorage() noexcept
 
 NVSStorage& NVSStorage::operator=(NVSStorage&& other) noexcept
 {
-    if (this != &other) {
-        if (handle != 0) {
+    if (this != &other)
+    {
+        if (handle != 0)
+        {
             nvs_close(handle);
         }
 
@@ -75,9 +81,9 @@ NVSStorage& NVSStorage::operator=(NVSStorage&& other) noexcept
     return *this;
 }
 
-esp_err_t NVSStorage::readStr(const char *key, lightstd::string &str) noexcept
+esp_err_t NVSStorage::readStr(const char* key, lightstd::string& str) noexcept
 {
-    size_t requiredSize;
+    size_t    requiredSize;
     esp_err_t err;
 
     assert(key);
@@ -86,34 +92,40 @@ esp_err_t NVSStorage::readStr(const char *key, lightstd::string &str) noexcept
 
     // Open storage (R/O access)
     err = open(true);
-    if (err != ESP_OK) {
+    if (err != ESP_OK)
+    {
         goto exit;
     }
 
     // Get string size (includes nul terminator)
     requiredSize = 0;
     err = nvs_get_str(handle, key, nullptr, &requiredSize);
-    if (err != ESP_OK) {
+    if (err != ESP_OK)
+    {
         goto exit;
     }
 
     // Allocate output
-    if (!str.reserve(requiredSize)) {
+    if (!str.reserve(requiredSize))
+    {
         err = ESP_ERR_NO_MEM;
         goto exit;
     }
 
     // Get string
     err = nvs_get_str(handle, key, str.data(), &requiredSize);
-    if (err != ESP_OK) {
+    if (err != ESP_OK)
+    {
         goto exit;
     }
 
     // Remove extra trailing \0
-    if (requiredSize > 0) {
+    if (requiredSize > 0)
+    {
         requiredSize--;
     }
-    if (!str.resize(requiredSize)) {
+    if (!str.resize(requiredSize))
+    {
         err = ESP_ERR_NO_MEM;
         goto exit;
     }
@@ -123,13 +135,14 @@ esp_err_t NVSStorage::readStr(const char *key, lightstd::string &str) noexcept
 
 exit:
     err = convertError(err);
-    if (err != ESP_OK) {
+    if (err != ESP_OK)
+    {
         str.clear();
     }
     return err;
 }
 
-esp_err_t NVSStorage::writeStr(const char *key, const char *value) noexcept
+esp_err_t NVSStorage::writeStr(const char* key, const char* value) noexcept
 {
     esp_err_t err;
 
@@ -138,7 +151,8 @@ esp_err_t NVSStorage::writeStr(const char *key, const char *value) noexcept
 
     // Open storage (R/W access)
     err = open(false);
-    if (err != ESP_OK) {
+    if (err != ESP_OK)
+    {
         goto exit;
     }
 
@@ -150,9 +164,9 @@ exit:
     return convertError(err);
 }
 
-esp_err_t NVSStorage::readBlob(const char *key, lightstd::vector<uint8_t> &blob) noexcept
+esp_err_t NVSStorage::readBlob(const char* key, lightstd::vector<uint8_t>& blob) noexcept
 {
-    size_t requiredSize;
+    size_t    requiredSize;
     esp_err_t err;
 
     assert(key);
@@ -161,26 +175,30 @@ esp_err_t NVSStorage::readBlob(const char *key, lightstd::vector<uint8_t> &blob)
 
     // Open storage (R/O access)
     err = open(true);
-    if (err != ESP_OK) {
+    if (err != ESP_OK)
+    {
         goto exit;
     }
 
     // Get blob size
     requiredSize = 0;
     err = nvs_get_blob(handle, key, nullptr, &requiredSize);
-    if (err != ESP_OK || requiredSize == 0) {
+    if (err != ESP_OK || requiredSize == 0)
+    {
         goto exit;
     }
 
     // Allocate output
-    if (!blob.resize(requiredSize)) {
+    if (!blob.resize(requiredSize))
+    {
         err = ESP_ERR_NO_MEM;
         goto exit;
     }
 
     // Get blob
     err = nvs_get_blob(handle, key, blob.data(), &requiredSize);
-    if (err != ESP_OK) {
+    if (err != ESP_OK)
+    {
         goto exit;
     }
 
@@ -189,13 +207,14 @@ esp_err_t NVSStorage::readBlob(const char *key, lightstd::vector<uint8_t> &blob)
 
 exit:
     err = convertError(err);
-    if (err != ESP_OK) {
+    if (err != ESP_OK)
+    {
         blob.clear();
     }
     return err;
 }
 
-esp_err_t NVSStorage::writeBlob(const char *key, const void *value, size_t valueLen) noexcept
+esp_err_t NVSStorage::writeBlob(const char* key, const void* value, size_t valueLen) noexcept
 {
     esp_err_t err;
 
@@ -204,7 +223,8 @@ esp_err_t NVSStorage::writeBlob(const char *key, const void *value, size_t value
 
     // Open storage (R/W access)
     err = open(false);
-    if (err != ESP_OK) {
+    if (err != ESP_OK)
+    {
         goto exit;
     }
 
@@ -216,7 +236,7 @@ exit:
     return convertError(err);
 }
 
-esp_err_t NVSStorage::readInt(const char *key, int32_t *pValue) noexcept
+esp_err_t NVSStorage::readInt(const char* key, int32_t* pValue) noexcept
 {
     esp_err_t err;
 
@@ -227,7 +247,8 @@ esp_err_t NVSStorage::readInt(const char *key, int32_t *pValue) noexcept
 
     // Open storage (R/O access)
     err = open(true);
-    if (err != ESP_OK) {
+    if (err != ESP_OK)
+    {
         goto exit;
     }
 
@@ -239,7 +260,7 @@ exit:
     return convertError(err);
 }
 
-esp_err_t NVSStorage::writeInt(const char *key, int32_t value) noexcept
+esp_err_t NVSStorage::writeInt(const char* key, int32_t value) noexcept
 {
     esp_err_t err;
 
@@ -248,7 +269,8 @@ esp_err_t NVSStorage::writeInt(const char *key, int32_t value) noexcept
 
     // Open storage (R/W access)
     err = open(false);
-    if (err != ESP_OK) {
+    if (err != ESP_OK)
+    {
         goto exit;
     }
 
@@ -260,7 +282,7 @@ exit:
     return convertError(err);
 }
 
-esp_err_t NVSStorage::erase(const char *key) noexcept
+esp_err_t NVSStorage::erase(const char* key) noexcept
 {
     esp_err_t err;
 
@@ -269,13 +291,15 @@ esp_err_t NVSStorage::erase(const char *key) noexcept
 
     // Open storage (R/W access)
     err = open(false);
-    if (err != ESP_OK) {
+    if (err != ESP_OK)
+    {
         goto exit;
     }
 
     // Delete entry and ignore error if the entry doesn't exist.
     err = nvs_erase_key(handle, key);
-    if (err != ESP_OK && err != ESP_ERR_NOT_FOUND && err != ESP_ERR_NVS_NOT_FOUND) {
+    if (err != ESP_OK && err != ESP_ERR_NOT_FOUND && err != ESP_ERR_NVS_NOT_FOUND)
+    {
         goto exit;
     }
 
@@ -289,16 +313,26 @@ exit:
 
 void NVSStorage::eraseAll() noexcept
 {
+    // Erasing the partition invalidates its cached open handle.
+    if (handle != 0)
+    {
+        nvs_close(handle);
+        handle = 0;
+        readOnlyMode = false;
+    }
+
     nvs_flash_erase_partition(partition);
     nvs_flash_init_partition(partition);
 }
 
 esp_err_t NVSStorage::commit() noexcept
 {
-    if (handle == 0) {
-        return ESP_ERR_INVALID_STATE ;
+    if (handle == 0)
+    {
+        return ESP_ERR_INVALID_STATE;
     }
-    if (readOnlyMode) {
+    if (readOnlyMode)
+    {
         return ESP_OK;
     }
     return convertError(nvs_commit(handle));
@@ -308,22 +342,27 @@ esp_err_t NVSStorage::open(bool readOnly) noexcept
 {
     esp_err_t err;
 
-    if (handle != 0 && readOnlyMode && (!readOnly)) {
+    if (handle != 0 && readOnlyMode && (!readOnly))
+    {
         nvs_close(handle);
         handle = 0;
     }
 
-    if (handle != 0) {
+    if (handle != 0)
+    {
         return ESP_OK;
     }
 
     err = init();
-    if (err == ESP_OK) {
+    if (err == ESP_OK)
+    {
         err = nvs_open_from_partition(partition, nameSpace, readOnly ? NVS_READONLY : NVS_READWRITE, &handle);
-        if (err == ESP_OK) {
+        if (err == ESP_OK)
+        {
             readOnlyMode = readOnly;
         }
-        else {
+        else
+        {
             handle = 0;
         }
     }
@@ -334,8 +373,9 @@ esp_err_t NVSStorage::init() noexcept
 {
     esp_err_t err;
 
-    err =-nvsInit();
-    if (err != ESP_OK) {
+    err = nvsInit();
+    if (err != ESP_OK)
+    {
         return err;
     }
     return nvs_flash_init_partition(partition);
@@ -343,11 +383,14 @@ esp_err_t NVSStorage::init() noexcept
 
 esp_err_t NVSStorage::convertError(esp_err_t err)
 {
-    if (err == ESP_ERR_NVS_NOT_FOUND) {
+    if (err == ESP_ERR_NVS_NOT_FOUND)
+    {
         return ESP_ERR_NOT_FOUND;
     }
-    if (err == ESP_ERR_NVS_INVALID_STATE) {
-        if (handle != 0) {
+    if (err == ESP_ERR_NVS_INVALID_STATE)
+    {
+        if (handle != 0)
+        {
             nvs_close(handle);
             handle = 0;
         }

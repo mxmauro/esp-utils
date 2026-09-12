@@ -6,8 +6,8 @@
 
 #include "allocator.h"
 #include <assert.h>
-#include <cstddef>
-#include <cstring>
+#include <stddef.h>
+#include <string.h>
 #include <new>
 #include <type_traits>
 #include <utility>
@@ -21,11 +21,11 @@ template <class T>
 class vector final
 {
 public:
-    using iterator        = T*;
-    using const_iterator  = const T*;
+    using iterator = T*;
+    using const_iterator = const T*;
 
     // Creates an empty vector using the provided allocator or the default one.
-    vector(IAllocator *_alloc = nullptr) noexcept
+    vector(IAllocator* _alloc = nullptr) noexcept
     {
         alloc = _alloc ? _alloc : IAllocator::getDefault();
     }
@@ -36,23 +36,24 @@ public:
     {
         other.ptr = nullptr;
         other.len = 0;
-        other.cap  = 0;
+        other.cap = 0;
     }
 
     vector& operator=(const vector&) noexcept = delete;
     vector& operator=(vector&& other) noexcept
     {
-        if (this != &other) {
+        if (this != &other)
+        {
             destroy_and_deallocate();
 
             ptr = other.ptr;
             len = other.len;
-            cap  = other.cap;
+            cap = other.cap;
             alloc = other.alloc;
 
             other.ptr = nullptr;
             other.len = 0;
-            other.cap  = 0;
+            other.cap = 0;
         }
         return *this;
     }
@@ -112,19 +113,19 @@ public:
     // Returns an iterator one past the last element.
     iterator end() noexcept
     {
-        return ptr + len;
+        return ptr ? (ptr + len) : nullptr;
     }
 
     // Returns a const iterator one past the last element.
     const_iterator end() const noexcept
     {
-        return ptr + len;
+        return ptr ? (ptr + len) : nullptr;
     }
 
     // Returns a const iterator one past the last element.
     const_iterator cend() const noexcept
     {
-        return ptr + len;
+        return ptr ? (ptr + len) : nullptr;
     }
 
     // Returns a reference to the element at the requested index.
@@ -181,16 +182,17 @@ public:
     {
         assert(len > 0);
         len--;
-        if constexpr (!std::is_trivially_destructible_v<T>) {
+        if constexpr (!std::is_trivially_destructible_v<T>)
+        {
             ptr[len].~T();
         }
-        ptr[len].~T();
     }
 
     // Ensures capacity for at least the requested number of elements.
     [[nodiscard]] bool reserve(size_t newCapacity) noexcept
     {
-        if (newCapacity <= cap) {
+        if (newCapacity <= cap)
+        {
             return true;
         }
         return reallocate(newCapacity, false);
@@ -199,7 +201,8 @@ public:
     // Shrinks the allocation to fit the current size.
     [[nodiscard]] bool shrink_to_fit() noexcept
     {
-        if (len == cap) {
+        if (len == cap)
+        {
             return true;
         }
         return reallocate(len, true);
@@ -208,29 +211,33 @@ public:
     // Resizes the vector using default construction for new elements.
     [[nodiscard]] bool resize(size_t newLen) noexcept
     {
-        static_assert(std::is_nothrow_default_constructible_v<T>,
-                    "resize(grow) requires T to be nothrow default constructible.");
+        static_assert(std::is_nothrow_default_constructible_v<T>, "resize(grow) requires T to be nothrow default constructible.");
 
-        if (newLen == len) {
+        if (newLen == len)
+        {
             return true;
         }
 
-        if (newLen < len) {
+        if (newLen < len)
+        {
             destroy_range(newLen, len);
             len = newLen;
             return true;
         }
 
         // grow
-        if (newLen > cap) {
+        if (newLen > cap)
+        {
             size_t target = growth_capacity(newLen);
-            if (!reallocate(target, false)) {
+            if (!reallocate(target, false))
+            {
                 return false;
             }
         }
 
         // default-construct new elements
-        for (size_t i = len; i < newLen; ++i) {
+        for (size_t i = len; i < newLen; ++i)
+        {
             ::new (static_cast<void*>(ptr + i)) T();
         }
 
@@ -243,39 +250,46 @@ public:
     {
         static_assert(std::is_nothrow_copy_constructible_v<T>, "resize(n, value) requires T to be nothrow copy constructible.");
 
-        if (newLen == len) {
+        if (newLen == len)
+        {
             return true;
         }
 
-        if (newLen < len) {
+        if (newLen < len)
+        {
             destroy_range(newLen, len);
             len = newLen;
             return true;
         }
 
         // grow
-        if (newLen > cap) {
-             size_t target = growth_capacity(newLen);
+        if (newLen > cap)
+        {
+            size_t target = growth_capacity(newLen);
 
             // Determine alias *before* reallocation moves the buffer.
             // If fillValue refers to an element inside the old buffer, capture its
             // index so we can locate it in the new buffer after reallocation.
-            const bool aliases = (ptr && &fillValue >= ptr && &fillValue < ptr + len);
+            const bool   aliases = (ptr && &fillValue >= ptr && &fillValue < ptr + len);
             const size_t aliasIdx = aliases ? static_cast<size_t>(&fillValue - ptr) : 0;
 
-            if (!reallocate(target, false)) {
+            if (!reallocate(target, false))
+            {
                 return false;
             }
 
             // After reallocation ptr points to the new buffer.
             // If fillValue was in the old buffer, use its new location; otherwise use directly.
             const T& src = aliases ? ptr[aliasIdx] : fillValue;
-            for (size_t i = len; i < newLen; ++i) {
+            for (size_t i = len; i < newLen; ++i)
+            {
                 ::new (static_cast<void*>(ptr + i)) T(src);
             }
         }
-        else {
-            for (size_t i = len; i < newLen; ++i) {
+        else
+        {
+            for (size_t i = len; i < newLen; ++i)
+            {
                 ::new (static_cast<void*>(ptr + i)) T(fillValue);
             }
         }
@@ -289,21 +303,19 @@ public:
     {
         static_assert(std::is_nothrow_copy_constructible_v<T>, "push_back(const T&) requires T to be nothrow copy constructible.");
 
-        // Check if v aliases an element inside our buffer. If reallocation is needed
-        // and v points into ptr, it would dangle after the move. In that case copy
-        // first, then reallocate. If no reallocation is needed, construct directly.
         const bool aliases = (len == cap && ptr && &v >= ptr && &v < ptr + len);
 
-        if (aliases) {
-            T vCopy(v); // copy before reallocation invalidates the reference
-
-            if (!ensure_capacity_for_one_more()) {
+        if (aliases)
+        {
+            if (!reallocate_and_emplace_alias(v))
+            {
                 return false;
             }
-
-            ::new (static_cast<void*>(ptr + len)) T(std::move(vCopy));
-        } else {
-            if (!ensure_capacity_for_one_more()) {
+        }
+        else
+        {
+            if (!ensure_capacity_for_one_more())
+            {
                 return false;
             }
             ::new (static_cast<void*>(ptr + len)) T(v);
@@ -318,11 +330,24 @@ public:
     {
         static_assert(std::is_nothrow_move_constructible_v<T>, "push_back(const T&) requires T to be nothrow move constructible.");
 
-        if (!ensure_capacity_for_one_more()) {
-            return false;
-        }
+        const bool aliases = (len == cap && ptr && &v >= ptr && &v < ptr + len);
 
-        ::new (static_cast<void*>(ptr + len)) T(std::move(v));
+        if (aliases)
+        {
+            if (!reallocate_and_emplace_alias(std::move(v)))
+            {
+                return false;
+            }
+        }
+        else
+        {
+            if (!ensure_capacity_for_one_more())
+            {
+                return false;
+            }
+
+            ::new (static_cast<void*>(ptr + len)) T(std::move(v));
+        }
 
         len++;
         return true;
@@ -334,7 +359,19 @@ public:
     {
         static_assert(std::is_nothrow_constructible_v<T, Args...>, "emplace_back requires T(args...) to be nothrow constructible.");
 
-        if (!ensure_capacity_for_one_more()) {
+        if (len == cap && ptr && (argument_aliases_element(args) || ...))
+        {
+            if (!reallocate_and_emplace_alias(std::forward<Args>(args)...))
+            {
+                return false;
+            }
+
+            len++;
+            return true;
+        }
+
+        if (!ensure_capacity_for_one_more())
+        {
             return false;
         }
 
@@ -353,17 +390,16 @@ public:
     }
 
 private:
-    static constexpr size_t max_array_size() noexcept
-    {
-        return ((size_t)-1) / sizeof(T);
-    }
+    static constexpr size_t MAX_ARRAY_SIZE = SIZE_MAX / sizeof(T);
 
     [[nodiscard]] size_t growth_capacity(size_t minNeeded) const noexcept
     {
         size_t c = (cap < 16) ? 16 : cap;
 
-        while (c < minNeeded) {
-            if (c > max_array_size() / 2) {
+        while (c < minNeeded)
+        {
+            if (c > MAX_ARRAY_SIZE / 2)
+            {
                 return minNeeded;
             }
             c *= 2;
@@ -373,13 +409,70 @@ private:
 
     [[nodiscard]] bool ensure_capacity_for_one_more() noexcept
     {
-        if (len < cap) {
+        if (len < cap)
+        {
             return true;
         }
-        if (len == max_array_size()) {
+        if (len == MAX_ARRAY_SIZE)
+        {
             return false;
         }
         return reallocate(growth_capacity(len + 1), false);
+    }
+
+    template <class U>
+    [[nodiscard]] bool argument_aliases_element(U&& arg) const noexcept
+    {
+        using DecayedU = std::remove_cv_t<std::remove_reference_t<U>>;
+
+        if constexpr (std::is_same_v<DecayedU, T>)
+        {
+            const T* candidate = &arg;
+            return candidate >= ptr && candidate < ptr + len;
+        }
+        return false;
+    }
+
+    template <class... Args>
+    [[nodiscard]] bool reallocate_and_emplace_alias(Args&&... args) noexcept
+    {
+        T*     newPtr;
+        size_t newCapacity;
+
+        static_assert(std::is_nothrow_move_constructible_v<T>, "vector requires T to be nothrow move constructible for reallocation.");
+
+        if (len == MAX_ARRAY_SIZE)
+        {
+            return false;
+        }
+
+        newCapacity = growth_capacity(len + 1);
+        newPtr = static_cast<T*>(alloc->allocate(newCapacity * sizeof(T)));
+        if (!newPtr)
+        {
+            return false;
+        }
+
+        ::new (static_cast<void*>(newPtr + len)) T(std::forward<Args>(args)...);
+
+        if constexpr (std::is_trivially_copyable_v<T>)
+        {
+            memcpy(newPtr, ptr, len * sizeof(T));
+        }
+        else
+        {
+            for (size_t i = 0; i < len; ++i)
+            {
+                ::new (static_cast<void*>(newPtr + i)) T(std::move(ptr[i]));
+            }
+        }
+
+        destroy_range(0, len);
+        alloc->deallocate(ptr);
+
+        ptr = newPtr;
+        cap = newCapacity;
+        return true;
     }
 
     [[nodiscard]] bool reallocate(size_t newCapacity, bool force) noexcept
@@ -388,19 +481,24 @@ private:
 
         static_assert(std::is_nothrow_move_constructible_v<T>, "vector requires T to be nothrow move constructible for reallocation.");
 
-        if (!force && newCapacity <= cap) {
+        if (!force && newCapacity <= cap)
+        {
             return true;
         }
-        if (newCapacity == cap) {
+        if (newCapacity == cap)
+        {
             return true; // nothing to do / or assert
         }
-        if (newCapacity > max_array_size()) {
+        if (newCapacity > MAX_ARRAY_SIZE)
+        {
             return false;
         }
 
         // Nothing to (re)allocate — just free existing storage.
-        if (newCapacity == 0) {
-            if (ptr) {
+        if (newCapacity == 0)
+        {
+            if (ptr)
+            {
                 alloc->deallocate(ptr);
                 ptr = nullptr;
                 cap = 0;
@@ -410,7 +508,8 @@ private:
 
         // Allocate raw storage (nothrow)
         newPtr = static_cast<T*>(alloc->allocate(newCapacity * sizeof(T)));
-        if (!newPtr) {
+        if (!newPtr)
+        {
             return false;
         }
 
@@ -418,14 +517,19 @@ private:
         // newCapacity are simply left in the old buffer and destroyed there.
         size_t newLen = (len < newCapacity) ? len : newCapacity;
 
-        if constexpr (std::is_trivially_copyable_v<T>) {
+        if constexpr (std::is_trivially_copyable_v<T>)
+        {
             // For trivial types (int, float, pointers, POD structs) a single memcpy
             // is correct and significantly faster than element-wise move construction.
-            if (newLen > 0) {
+            if (newLen > 0)
+            {
                 memcpy(newPtr, ptr, newLen * sizeof(T));
             }
-        } else {
-            for (size_t i = 0; i < newLen; ++i) {
+        }
+        else
+        {
+            for (size_t i = 0; i < newLen; ++i)
+            {
                 ::new (static_cast<void*>(newPtr + i)) T(std::move(ptr[i]));
             }
         }
@@ -433,12 +537,13 @@ private:
         // Destroy old elements + free old storage
         destroy_range(0, len);
 
-        if (ptr) {
+        if (ptr)
+        {
             alloc->deallocate(ptr);
         }
 
         ptr = newPtr;
-        cap  = newCapacity;
+        cap = newCapacity;
         len = newLen;
         return true;
     }
@@ -448,10 +553,13 @@ private:
         assert(ptr || from == to);
 
         // Trivially destructible types (int, float, pointers, etc.) need no destructor call.
-        if constexpr (!std::is_trivially_destructible_v<T>) {
-            if (ptr) {
+        if constexpr (!std::is_trivially_destructible_v<T>)
+        {
+            if (ptr)
+            {
                 // Destroy in reverse order [to-1 .. from] to mirror construction order.
-                for (size_t i = to; i > from; --i) {
+                for (size_t i = to; i > from; --i)
+                {
                     ptr[i - 1].~T();
                 }
             }
@@ -460,20 +568,21 @@ private:
 
     void destroy_and_deallocate() noexcept
     {
-        if (ptr) {
+        if (ptr)
+        {
             destroy_range(0, len);
             alloc->deallocate(ptr);
             ptr = nullptr;
             len = 0;
-            cap  = 0;
+            cap = 0;
         }
     }
 
 private:
-    T* ptr{nullptr};
-    size_t len{0};
-    size_t cap{0};
-    IAllocator *alloc{nullptr};
+    T*          ptr{nullptr};
+    size_t      len{0};
+    size_t      cap{0};
+    IAllocator* alloc{nullptr};
 };
 
 } // namespace lightstd

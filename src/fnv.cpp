@@ -1,16 +1,30 @@
 #include "fnv.h"
 
-#define FNV1A32_PRIME  16777619u
+#define FNV1A32_PRIME 16777619u
+#define FNV1A64_PRIME 1099511628211ull
 
 // -----------------------------------------------------------------------------
 
-uint32_t fnv1a32(const void *data, size_t len, uint32_t hash)
+uint32_t fnv1a32(const void* data, size_t len, uint32_t hash)
 {
-    const uint8_t *bytes = (const uint8_t *)data;
+    const uint8_t* bytes = static_cast<const uint8_t*>(data);
 
-    for (size_t i = 0; i < len; i++) {
+    for (size_t i = 0; i < len; i++)
+    {
         hash ^= bytes[i];
         hash *= FNV1A32_PRIME;
+    }
+    return hash;
+}
+
+uint64_t fnv1a64(const void* data, size_t len, uint64_t hash)
+{
+    const uint8_t* bytes = static_cast<const uint8_t*>(data);
+
+    for (size_t i = 0; i < len; i++)
+    {
+        hash ^= bytes[i];
+        hash *= FNV1A64_PRIME;
     }
     return hash;
 }

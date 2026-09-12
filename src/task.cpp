@@ -1,142 +1,385 @@
 #include "task.h"
-#include <esp_log.h>
-#include <string.h>
+#include "mutex.h"
+#include "rundown_protection.h"
+#include <freertos/event_groups.h>
+#include <assert.h>
+#include <stdatomic.h>
+#include <stdlib.h>
 
-// static const char* TAG = "Task";
-
-#define SIGNAL_BIT_CONTINUE  1
-#define SIGNAL_BIT_MUST_QUIT 2
-#define SIGNAL_BIT_QUIT      4
-
-// -----------------------------------------------------------------------------
-
-typedef struct InternalTaskData_s {
-    Task_t *task;
-    TaskRoutine_t fn;
-    void *pvParameters;
-} InternalTaskData_t;
+#define SIGNAL_BIT_CONTINUE      BIT0
+#define SIGNAL_BIT_MUST_QUIT     BIT1
+#define SIGNAL_BIT_QUIT          BIT2
+#define SIGNAL_BIT_CREATOR_READY BIT3
 
 // -----------------------------------------------------------------------------
 
-static void taskRoutine(void *pvParameters);
+typedef enum TaskLifecycle_e : uint8_t {
+    Running,
+    Exited,
+    Joining,
+    Detached,
+} TaskLifecycle_t;
+
+typedef struct TaskState_s {
+    EventGroupHandle_t       eg;
+    RundownProtection_t      rundown;
+    _Atomic(TaskLifecycle_t) lifecycle;
+    _Atomic(TaskHandle_t)    worker;
+    TaskRoutine_t            fn;
+    void*                    pvParameters;
+    TaskState_s*             next;
+} TaskState_t;
 
 // -----------------------------------------------------------------------------
 
-void taskInit(Task_t *task)
+static Mutex        sTaskRegistryMtx;
+static TaskState_t* sTaskRegistryHead = nullptr;
+
+static void         taskRoutine(void* pvParameters);
+static void         taskSetContinue(TaskState_t* task);
+static void         taskDestroy(TaskState_t* task);
+static void         taskRegister(TaskState_t* task);
+static void         taskUnregister(TaskState_t* task);
+static void         taskUnregisterLocked(TaskState_t* task);
+static TaskState_t* taskFindRegistered(Task_t task);
+static bool         taskTryAcquire(Task_t task, TaskState_t** state);
+static bool         taskTryBeginJoin(Task_t task, TaskState_t** state);
+static bool         taskTryBeginDetach(Task_t task, TaskState_t** state, bool* selfDetach);
+
+// -----------------------------------------------------------------------------
+
+Task_t taskCreate(TaskRoutine_t fn, const char* pcName, uint32_t usStackDepth, void* pvParameters, UBaseType_t uxPriority,
+                  BaseType_t xCoreID)
 {
-    runOnceInit(&task->once);
-    task->eg = nullptr;
-    memset(&task->eventGroupBuffer, 0, sizeof(task->eventGroupBuffer));
-}
+    TaskState_t* task;
+    TaskHandle_t worker;
 
-esp_err_t taskCreate(Task_t *task, TaskRoutine_t fn, const char *pcName, uint32_t usStackDepth,
-                     void *pvParameters, UBaseType_t uxPriority, BaseType_t xCoreID)
-{
-    InternalTaskData_t data = {
-        .task = task,
-        .fn = fn,
-        .pvParameters = pvParameters
-    };
-    TaskHandle_t h;
-
-    if ((!fn) || (!pcName) || *pcName == 0) {
-        return ESP_ERR_INVALID_ARG;
+    if ((!fn) || (!pcName) || (*pcName == 0) || (usStackDepth == 0))
+    {
+        return nullptr;
     }
 
-    runOnceInit(&task->once);
-    task->eg = xEventGroupCreateStatic(&(task->eventGroupBuffer));
-
-    if (xTaskCreatePinnedToCore(&taskRoutine, pcName, usStackDepth, &data, uxPriority, &h, xCoreID) != pdPASS) {
-        vEventGroupDelete(task->eg);
-        task->eg = nullptr;
-        return ESP_FAIL;
+    task = static_cast<TaskState_t*>(malloc(sizeof(TaskState_t)));
+    if (!task)
+    {
+        return nullptr;
     }
 
-    // Wait for the continue flag
+    atomic_init(&task->lifecycle, TaskLifecycle_t::Running);
+    atomic_init(&task->worker, nullptr);
+    task->fn = fn;
+    task->pvParameters = pvParameters;
+    task->next = nullptr;
+    task->eg = xEventGroupCreate();
+    if (!task->eg)
+    {
+        free(task);
+        return nullptr;
+    }
+
+    rundownProtInit(&task->rundown);
+    if (!rundownProtAcquire(&task->rundown))
+    {
+        taskDestroy(task);
+        return nullptr;
+    }
+
+    taskRegister(task);
+
+    if (xTaskCreatePinnedToCore(&taskRoutine, pcName, usStackDepth, task, uxPriority, &worker, xCoreID) != pdPASS)
+    {
+        taskUnregister(task);
+        rundownProtRelease(&task->rundown);
+        taskDestroy(task);
+        return nullptr;
+    }
+
+    atomic_store_explicit(&task->worker, worker, memory_order_release);
     xEventGroupWaitBits(task->eg, SIGNAL_BIT_CONTINUE, pdFALSE, pdTRUE, portMAX_DELAY);
+    xEventGroupSetBits(task->eg, SIGNAL_BIT_CREATOR_READY);
 
-    // Done
-    return ESP_OK;
+    return task;
 }
 
-void taskSignalContinue(Task_t *task)
+void taskSignalContinue(Task_t task)
 {
-    // Signal continue
+    TaskState_t* state;
+
+    if (!taskTryAcquire(task, &state))
+    {
+        return;
+    }
+
+    assert(atomic_load_explicit(&state->worker, memory_order_acquire) == xTaskGetCurrentTaskHandle());
+    if (atomic_load_explicit(&state->worker, memory_order_acquire) != xTaskGetCurrentTaskHandle())
+    {
+        rundownProtRelease(&state->rundown);
+        return;
+    }
+
+    taskSetContinue(state);
+    rundownProtRelease(&state->rundown);
+}
+
+bool taskShouldQuit(Task_t task)
+{
+    TaskState_t* state;
+    bool         shouldQuit;
+
+    if (!taskTryAcquire(task, &state))
+    {
+        return true;
+    }
+
+    shouldQuit = (atomic_load_explicit(&state->lifecycle, memory_order_acquire) != TaskLifecycle_t::Running) ||
+                 ((xEventGroupGetBits(state->eg) & SIGNAL_BIT_MUST_QUIT) != 0);
+
+    rundownProtRelease(&state->rundown);
+    return shouldQuit;
+}
+
+bool taskIsRunning(Task_t task)
+{
+    TaskState_t* state;
+    bool         isRunning;
+
+    if (!taskTryAcquire(task, &state))
+    {
+        return false;
+    }
+
+    isRunning = (atomic_load_explicit(&state->lifecycle, memory_order_acquire) == TaskLifecycle_t::Running) &&
+                ((xEventGroupGetBits(state->eg) & SIGNAL_BIT_QUIT) == 0);
+
+    rundownProtRelease(&state->rundown);
+    return isRunning;
+}
+
+void taskJoin(Task_t task)
+{
+    TaskState_t* state;
+    bool         joined = taskTryBeginJoin(task, &state);
+    assert(joined);
+    if (!joined)
+    {
+        return;
+    }
+
+    xEventGroupSetBits(state->eg, SIGNAL_BIT_MUST_QUIT);
+    rundownProtRelease(&state->rundown);
+    rundownProtWait(&state->rundown);
+    taskDestroy(state);
+}
+
+void taskDetach(Task_t task)
+{
+    TaskState_t* state;
+    bool         selfDetach;
+    bool         detached = taskTryBeginDetach(task, &state, &selfDetach);
+    assert(detached);
+    if (!detached)
+    {
+        return;
+    }
+
+    if (selfDetach)
+    {
+        taskSetContinue(state);
+        xEventGroupWaitBits(state->eg, SIGNAL_BIT_CREATOR_READY, pdFALSE, pdTRUE, portMAX_DELAY);
+        rundownProtRelease(&state->rundown);
+        rundownProtWait(&state->rundown);
+        taskDestroy(state);
+        return;
+    }
+
+    rundownProtRelease(&state->rundown);
+    rundownProtWait(&state->rundown);
+    taskDestroy(state);
+}
+
+// -----------------------------------------------------------------------------
+
+static void taskRoutine(void* pvParameters)
+{
+    TaskState_t*       task = static_cast<TaskState_t*>(pvParameters);
+    TaskLifecycle_t    expected = TaskLifecycle_t::Running;
+    EventGroupHandle_t eg;
+
+    atomic_store_explicit(&task->worker, xTaskGetCurrentTaskHandle(), memory_order_release);
+
+    if (!task->pvParameters)
+    {
+        taskSetContinue(task);
+    }
+
+    task->fn(task, task->pvParameters);
+
+    taskSetContinue(task);
+    eg = task->eg;
+    atomic_compare_exchange_strong_explicit(&task->lifecycle, &expected, TaskLifecycle_t::Exited, memory_order_acq_rel,
+                                            memory_order_acquire);
+    xEventGroupSetBits(eg, SIGNAL_BIT_QUIT);
+    rundownProtRelease(&task->rundown);
+
+    vTaskDelete(nullptr);
+}
+
+static void taskSetContinue(TaskState_t* task)
+{
     xEventGroupSetBits(task->eg, SIGNAL_BIT_CONTINUE);
 }
 
-bool taskShouldQuit(Task_t *task)
+static void taskDestroy(TaskState_t* task)
 {
-    // Check for quit
-    if (!task->eg) {
-        return true;
-    }
-    return ((xEventGroupWaitBits(task->eg, SIGNAL_BIT_MUST_QUIT, pdFALSE, pdFALSE, 0) & SIGNAL_BIT_MUST_QUIT) != 0);
+    vEventGroupDelete(task->eg);
+    task->eg = nullptr;
+    rundownProtDestroy(&task->rundown);
+    free(task);
 }
 
-bool taskIsRunning(Task_t *task)
+static void taskRegister(TaskState_t* task)
 {
-    if (!task->eg) {
+    AutoMutex lock(sTaskRegistryMtx);
+
+    task->next = sTaskRegistryHead;
+    sTaskRegistryHead = task;
+}
+
+static void taskUnregister(TaskState_t* task)
+{
+    AutoMutex lock(sTaskRegistryMtx);
+
+    taskUnregisterLocked(task);
+}
+
+static void taskUnregisterLocked(TaskState_t* task)
+{
+    TaskState_t** current = &sTaskRegistryHead;
+
+    while ((*current) && (*current != task))
+    {
+        current = &(*current)->next;
+    }
+
+    assert(*current == task);
+    if (*current == task)
+    {
+        *current = task->next;
+        task->next = nullptr;
+    }
+}
+
+static TaskState_t* taskFindRegistered(Task_t task)
+{
+    TaskState_t* current = sTaskRegistryHead;
+
+    while (current)
+    {
+        if (current == task)
+        {
+            return current;
+        }
+        current = current->next;
+    }
+    return nullptr;
+}
+
+static bool taskTryAcquire(Task_t task, TaskState_t** state)
+{
+    AutoMutex    lock(sTaskRegistryMtx);
+    TaskState_t* registered = taskFindRegistered(task);
+
+    if (!registered || !rundownProtAcquire(&registered->rundown))
+    {
         return false;
     }
-    return ((xEventGroupWaitBits(task->eg, SIGNAL_BIT_QUIT, pdFALSE, pdFALSE, 0) & SIGNAL_BIT_QUIT) == 0);
+
+    *state = registered;
+    return true;
 }
 
-void taskJoin(Task_t *task)
+static bool taskTryBeginJoin(Task_t task, TaskState_t** state)
 {
-    runOnce(&task->once, [](void *arg) -> void {
-        Task_t *task = (Task_t *)arg;
+    AutoMutex       lock(sTaskRegistryMtx);
+    TaskState_t*    registered = taskFindRegistered(task);
+    TaskLifecycle_t lifecycle;
+    TaskLifecycle_t expected;
 
-        if (task->eg) {
-            // Signal quit
-            xEventGroupSetBits(task->eg, SIGNAL_BIT_MUST_QUIT);
+    if (!registered)
+    {
+        return false;
+    }
 
-            // Wait for quit
-            xEventGroupWaitBits(task->eg, SIGNAL_BIT_QUIT, pdFALSE, pdFALSE, portMAX_DELAY);
+    lifecycle = atomic_load_explicit(&registered->lifecycle, memory_order_acquire);
+    if ((lifecycle == TaskLifecycle_t::Running) &&
+        (atomic_load_explicit(&registered->worker, memory_order_acquire) == xTaskGetCurrentTaskHandle()))
+    {
+        return false;
+    }
 
-            // Delete event group
-            vEventGroupDelete(task->eg);
-            task->eg = nullptr;
-            memset(&task->eventGroupBuffer, 0, sizeof(task->eventGroupBuffer));
+    expected = TaskLifecycle_t::Running;
+    if (!atomic_compare_exchange_strong_explicit(&registered->lifecycle, &expected, TaskLifecycle_t::Joining, memory_order_acq_rel,
+                                                 memory_order_acquire))
+    {
+        expected = TaskLifecycle_t::Exited;
+        if (!atomic_compare_exchange_strong_explicit(&registered->lifecycle, &expected, TaskLifecycle_t::Joining, memory_order_acq_rel,
+                                                     memory_order_acquire))
+        {
+            return false;
         }
-    }, task);
+    }
+
+    if (!rundownProtAcquire(&registered->rundown))
+    {
+        assert(false);
+        return false;
+    }
+
+    taskUnregisterLocked(registered);
+    *state = registered;
+    return true;
 }
 
-void taskDetach(Task_t *task)
+static bool taskTryBeginDetach(Task_t task, TaskState_t** state, bool* selfDetach)
 {
-    if (task->eg) {
-        // Delete event group
-        vEventGroupDelete(task->eg);
-        task->eg = nullptr;
-        memset(&task->eventGroupBuffer, 0, sizeof(task->eventGroupBuffer));
-    }
-}
+    AutoMutex       lock(sTaskRegistryMtx);
+    TaskState_t*    registered = taskFindRegistered(task);
+    TaskLifecycle_t lifecycle;
+    TaskLifecycle_t expected;
 
-static void taskRoutine(void *pvParameters)
-{
-    InternalTaskData_t data;
-
-    memcpy(&data, (InternalTaskData_t *)pvParameters, sizeof(InternalTaskData_t));
-
-    // ESP_LOGD(TAG, "On task routine.");
-
-    // If no parameters were given, no need to ask the user to signal continue
-    if (!data.pvParameters) {
-        taskSignalContinue(data.task);
+    if (!registered)
+    {
+        return false;
     }
 
-    // ESP_LOGD(TAG, "Task before callback.");
-
-    // Call the original callback
-    data.fn(data.task, data.pvParameters);
-
-    // ESP_LOGD(TAG, "Task after callback.");
-
-    // Signal quit
-    if (data.task->eg) {
-        xEventGroupSetBits(data.task->eg, SIGNAL_BIT_QUIT);
+    lifecycle = atomic_load_explicit(&registered->lifecycle, memory_order_acquire);
+    expected = TaskLifecycle_t::Running;
+    *selfDetach = (lifecycle == TaskLifecycle_t::Running) &&
+                  (atomic_load_explicit(&registered->worker, memory_order_acquire) == xTaskGetCurrentTaskHandle());
+    if (*selfDetach)
+    {
+        if (!atomic_compare_exchange_strong_explicit(&registered->lifecycle, &expected, TaskLifecycle_t::Detached, memory_order_acq_rel,
+                                                     memory_order_acquire))
+        {
+            return false;
+        }
+    }
+    else
+    {
+        expected = TaskLifecycle_t::Exited;
+        if (!atomic_compare_exchange_strong_explicit(&registered->lifecycle, &expected, TaskLifecycle_t::Detached, memory_order_acq_rel,
+                                                     memory_order_acquire))
+        {
+            return false;
+        }
+        if (!rundownProtAcquire(&registered->rundown))
+        {
+            assert(false);
+            return false;
+        }
     }
 
-    // Delete task
-    vTaskDelete(nullptr);
+    taskUnregisterLocked(registered);
+    *state = registered;
+    return true;
 }

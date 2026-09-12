@@ -38,8 +38,8 @@
     #error C++ compiler required.
 #endif // !__cplusplus
 
-#include <cstddef>
-#include <cstdlib>
+#include <stddef.h>
+#include <stdlib.h>
 #include <new>
 #include <type_traits>
 #include <utility>
@@ -49,23 +49,25 @@
 namespace lightstd {
 
 // Forward declaration of primary template
-template<typename Signature, std::size_t SboSize = 32>
+template <typename Signature, size_t SboSize = 32>
 class light_function;
 
 // Partial specialisation for callable signatures
-template<typename R, typename... Args, std::size_t SboSize>
+template <typename R, typename... Args, size_t SboSize>
 class light_function<R(Args...), SboSize>
 {
 public:
-    static constexpr std::size_t SBO_SIZE  = SboSize;
-    static constexpr std::size_t SBO_ALIGN = alignof(std::max_align_t);
+    static constexpr size_t SBO_SIZE = SboSize;
+    static constexpr size_t SBO_ALIGN = alignof(max_align_t);
 
     // SboSize == 0 would produce a zero-length array (a GCC extension, not
     // standard C++) and silently route every callable through the heap.
     static_assert(SboSize > 0, "light_function: SboSize must be at least 1");
 
     light_function() noexcept = default;
-    light_function(std::nullptr_t) noexcept {}
+    light_function(decltype(nullptr)) noexcept
+    {
+    }
 
     // Construct from any callable (lambda, functor, plain function pointer).
     // SFINAE prevents this from shadowing the copy/move constructors.
@@ -73,10 +75,7 @@ public:
     // it will be stored as a nested callable (same as std::function wrapping
     // another std::function). This is intentional but can be surprising;
     // prefer assigning same-SboSize instances when possible.
-    template<
-        typename F,
-        typename = typename std::enable_if<!std::is_same<typename std::decay<F>::type, light_function>::value>::type
-    >
+    template <typename F, typename = typename std::enable_if<!std::is_same<typename std::decay<F>::type, light_function>::value>::type>
     light_function(F&& f) noexcept
     {
         assign(std::forward<F>(f));
@@ -99,7 +98,8 @@ public:
 
     light_function& operator=(const light_function& other) noexcept
     {
-        if (this != &other) {
+        if (this != &other)
+        {
             destroy();
             copy_from(other);
         }
@@ -108,23 +108,21 @@ public:
 
     light_function& operator=(light_function&& other) noexcept
     {
-        if (this != &other) {
+        if (this != &other)
+        {
             destroy();
             move_from(other);
         }
         return *this;
     }
 
-    light_function& operator=(std::nullptr_t) noexcept
+    light_function& operator=(decltype(nullptr)) noexcept
     {
         destroy();
         return *this;
     }
 
-    template<
-        typename F,
-        typename = typename std::enable_if<!std::is_same<typename std::decay<F>::type, light_function>::value>::type
-    >
+    template <typename F, typename = typename std::enable_if<!std::is_same<typename std::decay<F>::type, light_function>::value>::type>
     light_function& operator=(F&& f) noexcept
     {
         destroy();
@@ -145,7 +143,8 @@ public:
     //   This matches std::function's calling convention exactly.
     R operator()(Args... args) const
     {
-        if (!m_vtable) {
+        if (!m_vtable)
+        {
             // Calling an empty light_function is a hard programming error.
             abort();
         }
@@ -169,36 +168,41 @@ public:
 private:
     // Vtable: plain function pointers — no virtual dispatch, no RTTI.
     // alloc_size carries sizeof(F)
-    struct Vtable {
-        R           (*invoke)       (void* storage, Args&&... args);
-        void        (*copy)         (void* dst, const void* src);
-        void        (*move_destroy) (void* dst, void* src); // move dst, destroy src
-        void        (*destroy)      (void* storage);
-        std::size_t alloc_size;   // sizeof(F) — used when heap path is taken
+    struct Vtable
+    {
+        R (*invoke)(void* storage, Args&&... args);
+        void (*copy)(void* dst, const void* src);
+        void (*move_destroy)(void* dst, void* src); // move dst, destroy src
+        void (*destroy)(void* storage);
+        size_t alloc_size; // sizeof(F) — used when heap path is taken
     };
 
-    template<typename F>
+    template <typename F>
     static const Vtable* vtable_for() noexcept
     {
         static const Vtable vt = {
             // invoke — forward each argument to preserve move semantics
-            [](void* s, Args&&... args) -> R {
+            [](void* s, Args&&... args) -> R
+            {
                 return (*static_cast<F*>(s))(std::forward<Args>(args)...);
             },
             // copy-construct dst from src
-            [](void* dst, const void* src) {
+            [](void* dst, const void* src)
+            {
                 ::new (dst) F(*static_cast<const F*>(src));
             },
             // move-construct dst from src, then destroy src in-place
-            [](void* dst, void* src) {
+            [](void* dst, void* src)
+            {
                 ::new (dst) F(std::move(*static_cast<F*>(src)));
                 static_cast<F*>(src)->~F();
             },
             // destroy in-place
-            [](void* s) {
+            [](void* s)
+            {
                 static_cast<F*>(s)->~F();
             },
-            sizeof(F)   // alloc_size
+            sizeof(F) // alloc_size
         };
         return &vt;
     }
@@ -206,12 +210,12 @@ private:
     // Storage
     alignas(SBO_ALIGN) unsigned char m_sbo[SBO_SIZE];
 
-    void*         m_heap{nullptr};   // non-null => callable lives on the heap
+    void*         m_heap{nullptr}; // non-null => callable lives on the heap
     const Vtable* m_vtable{nullptr}; // null => empty
 
     void* active_storage() noexcept
     {
-         return m_heap ? m_heap : m_sbo;
+        return m_heap ? m_heap : m_sbo;
     }
     const void* active_storage() const noexcept
     {
@@ -221,7 +225,7 @@ private:
     // Tag-dispatch helpers: SBO vs heap allocation.
     // Overloads prevent the compiler from instantiating the placement-new
     // branch with a type that doesn't fit (avoids -Wplacement-new / UB).
-    template<typename Fd, typename F>
+    template <typename Fd, typename F>
     void store(F&& f, std::true_type /*fits in SBO*/) noexcept
     {
         // Noexcept is unconditional here: the static_asserts in assign
@@ -231,14 +235,15 @@ private:
         ::new (static_cast<void*>(m_sbo)) Fd(std::forward<F>(f));
     }
 
-    template<typename Fd, typename F>
+    template <typename Fd, typename F>
     void store(F&& f, std::false_type /*too large — use heap*/)
     {
         // Use std::nothrow: under -fno-exceptions the default ::operator new
         // may still invoke the new-handler or behave implementation-defined.
         // std::nothrow guarantees a nullptr return on failure.
         void* mem = ::operator new(sizeof(Fd), std::nothrow);
-        if (!mem) {
+        if (!mem)
+        {
             // Out of heap memory — unrecoverable on ESP-IDF.
             abort();
         }
@@ -246,7 +251,7 @@ private:
         ::new (m_heap) Fd(std::forward<F>(f));
     }
 
-    template<typename F>
+    template <typename F>
     void assign(F&& f) noexcept
     {
         using Fd = typename std::decay<F>::type;
@@ -306,9 +311,8 @@ private:
         //     If you genuinely need a copyable lambda that owns a std::string,
         //     wrap the string in a std::shared_ptr<std::string>: the shared_ptr
         //     copy is nothrow and both lambda copies share the same string.
-        static_assert(std::is_nothrow_copy_constructible<Fd>::value,
-                      "light_function: stored callable must be nothrow copy constructible. "
-                      "Capture heavy types by reference [&x] instead of by value [x].");
+        static_assert(std::is_nothrow_copy_constructible<Fd>::value, "light_function: stored callable must be nothrow copy constructible. "
+                                                                     "Capture heavy types by reference [&x] instead of by value [x].");
 
         store<Fd>(std::forward<F>(f), fits{});
         m_vtable = vtable_for<Fd>();
@@ -316,9 +320,11 @@ private:
 
     void destroy() noexcept
     {
-        if (m_vtable) {
+        if (m_vtable)
+        {
             m_vtable->destroy(active_storage());
-            if (m_heap) {
+            if (m_heap)
+            {
                 ::operator delete(m_heap);
                 m_heap = nullptr;
             }
@@ -328,14 +334,17 @@ private:
 
     void copy_from(const light_function& other) noexcept
     {
-        if (!other.m_vtable) {
+        if (!other.m_vtable)
+        {
             return;
         }
 
-        if (other.m_heap) {
+        if (other.m_heap)
+        {
             // Null-check the allocation; abort() on failure (heap exhausted).
             void* mem = ::operator new(other.m_vtable->alloc_size, std::nothrow);
-            if (!mem) {
+            if (!mem)
+            {
                 abort();
             }
 
@@ -344,17 +353,25 @@ private:
             // and this guard will never actually trigger. It is kept as a
             // defensive safety net in case the class is ever modified to relax
             // the copy constraint, and to document the intended cleanup logic.
-            struct HeapGuard {
+            struct HeapGuard
+            {
                 void* ptr;
                 bool  committed;
-                ~HeapGuard() { if (!committed) ::operator delete(ptr); }
+                ~HeapGuard()
+                {
+                    if (!committed)
+                    {
+                        ::operator delete(ptr);
+                    }
+                }
             } guard{mem, false};
 
             other.m_vtable->copy(mem, other.m_heap);
             guard.committed = true;
             m_heap = mem;
         }
-        else {
+        else
+        {
             m_heap = nullptr;
             other.m_vtable->copy(m_sbo, other.m_sbo);
         }
@@ -377,47 +394,50 @@ private:
     //                 is what gets stored.
     void move_from(light_function& other) noexcept
     {
-        if (!other.m_vtable) {
+        if (!other.m_vtable)
+        {
             return;
         }
 
-        if (other.m_heap) {
+        if (other.m_heap)
+        {
             // Steal the heap pointer — no allocation needed.
             m_heap = other.m_heap;
             other.m_heap = nullptr;
         }
-        else {
+        else
+        {
             m_heap = nullptr;
             // Move-construct into our SBO, then destroy the source SBO object.
             other.m_vtable->move_destroy(m_sbo, other.m_sbo);
         }
 
-        m_vtable       = other.m_vtable;
+        m_vtable = other.m_vtable;
         other.m_vtable = nullptr;
     }
 };
 
 // Non-member comparison with nullptr
-template<typename R, typename... Args, std::size_t S>
-bool operator==(const light_function<R(Args...), S>& f, std::nullptr_t) noexcept
+template <typename R, typename... Args, size_t S>
+bool operator==(const light_function<R(Args...), S>& f, decltype(nullptr)) noexcept
 {
     return !f;
 }
 
-template<typename R, typename... Args, std::size_t S>
-bool operator==(std::nullptr_t, const light_function<R(Args...), S>& f) noexcept
+template <typename R, typename... Args, size_t S>
+bool operator==(decltype(nullptr), const light_function<R(Args...), S>& f) noexcept
 {
     return !f;
 }
 
-template<typename R, typename... Args, std::size_t S>
-bool operator!=(const light_function<R(Args...), S>& f, std::nullptr_t) noexcept
+template <typename R, typename... Args, size_t S>
+bool operator!=(const light_function<R(Args...), S>& f, decltype(nullptr)) noexcept
 {
     return !!f;
 }
 
-template<typename R, typename... Args, std::size_t S>
-bool operator!=(std::nullptr_t, const light_function<R(Args...), S>& f) noexcept
+template <typename R, typename... Args, size_t S>
+bool operator!=(decltype(nullptr), const light_function<R(Args...), S>& f) noexcept
 {
     return !!f;
 }

@@ -1,6 +1,5 @@
 #pragma once
 
-
 #ifndef __cplusplus
     #error C++ compiler required.
 #endif // !__cplusplus
@@ -23,7 +22,7 @@ class MiniProfiler
 {
 public:
     // Starts profiling a named scope for the given log tag.
-    explicit MiniProfiler(const char *_tag, const char* _name) : tag(_tag), name(_name), startTimeUs(esp_timer_get_time())
+    explicit MiniProfiler(const char* _tag, const char* _name) : tag(_tag), name(_name), startTimeUs(esp_timer_get_time())
     {
     }
     MiniProfiler(const MiniProfiler&) = delete;
@@ -50,22 +49,29 @@ public:
     {
         uint64_t sec = t / 1'000'000;
         uint64_t usec = t % 1'000'000;
-        snprintf(buf, 64, "%llu:%02u:%02u.%06llu", (sec / 3600), (unsigned int)(sec / 60) % 60, (unsigned int)(sec % 60), usec);
+        snprintf(buf, 64, "%llu:%02u:%02u.%06llu", static_cast<unsigned long long>(sec / 3600), static_cast<unsigned int>((sec / 60) % 60),
+                 static_cast<unsigned int>(sec % 60), static_cast<unsigned long long>(usec));
     }
 
     // Formats a duration in microseconds, milliseconds, or seconds.
     static void formatDuration(uint64_t d, char buf[64])
     {
         if (d < 1000)
+        {
             snprintf(buf, 64, "%llu µs", d);
+        }
         else if (d < 1'000'000)
+        {
             snprintf(buf, 64, "%.3f ms", d / 1000.0);
+        }
         else
+        {
             snprintf(buf, 64, "%.3f s", d / 1'000'000.0);
+        }
     }
 
 private:
-    const char *tag;
-    const char *name;
-    uint64_t startTimeUs;
+    const char* tag;
+    const char* name;
+    uint64_t    startTimeUs;
 };
