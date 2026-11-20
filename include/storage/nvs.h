@@ -8,13 +8,22 @@
 
 // -----------------------------------------------------------------------------
 
+#ifdef __cplusplus
+extern "C" {
+#endif // __cplusplus
+
 // Initializes the shared NVS subsystem for this component.
 esp_err_t nvsInit();
 
 #ifdef __cplusplus
+}
+#endif // __cplusplus
 
-// Non-volatile storage implementation of the IStorage interface using
-// ESP-IDF NVS.
+// -----------------------------------------------------------------------------
+
+#ifdef __cplusplus
+
+// Non-volatile storage implementation of the IStorage interface using ESP-IDF NVS.
 class NVSStorage final : public IStorage
 {
 public:
@@ -24,34 +33,34 @@ public:
     // Transfers ownership of the underlying NVS handle.
     NVSStorage(NVSStorage&& other) noexcept;
     // Closes the owned NVS handle if one is open.
-    ~NVSStorage() noexcept;
+    ~NVSStorage() noexcept override;
 
     NVSStorage& operator=(const NVSStorage&) = delete;
     // Replaces this storage view with another storage handle owner.
     NVSStorage& operator=(NVSStorage&& other) noexcept;
 
     // Reads a string value from NVS.
-    esp_err_t readStr(const char* key, lightstd::string& str) noexcept;
+    esp_err_t readStr(const char* key, lightstd::string& str) noexcept override;
     // Writes a string value to NVS.
-    esp_err_t writeStr(const char* key, const char* value) noexcept;
+    esp_err_t writeStr(const char* key, const char* value) noexcept override;
 
     // Reads a blob value from NVS.
-    esp_err_t readBlob(const char* key, lightstd::vector<uint8_t>& blob) noexcept;
+    esp_err_t readBlob(const char* key, lightstd::vector<uint8_t>& blob) noexcept override;
     // Writes a blob value to NVS.
-    esp_err_t writeBlob(const char* key, const void* value, size_t valueLen) noexcept;
+    esp_err_t writeBlob(const char* key, const void* value, size_t valueLen) noexcept override;
 
     // Reads a 32-bit integer value from NVS.
-    esp_err_t readInt(const char* key, int32_t* pValue) noexcept;
+    esp_err_t readInt(const char* key, int32_t* pValue) noexcept override;
     // Writes a 32-bit integer value to NVS.
-    esp_err_t writeInt(const char* key, int32_t value) noexcept;
+    esp_err_t writeInt(const char* key, int32_t value) noexcept override;
 
     // Erases a single key from NVS.
-    esp_err_t erase(const char* key) noexcept;
+    esp_err_t erase(const char* key) noexcept override;
     // Erases and reinitializes the whole NVS partition.
     void eraseAll() noexcept;
 
     // Commits pending writes to flash.
-    esp_err_t commit() noexcept;
+    esp_err_t commit() noexcept override;
 
 private:
     esp_err_t init() noexcept;

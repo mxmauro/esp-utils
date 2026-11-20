@@ -1,4 +1,5 @@
 #include <string.h>
+#include <utility>
 #include <unity.h>
 #include "growable_buffer.h"
 
@@ -115,4 +116,21 @@ TEST_CASE("GrowableBuffer rejects overflowing capacity", "bounds")
     GrowableBuffer_t gb = GB_STATIC_INIT;
 
     TEST_ASSERT_FALSE(gbEnsureSize(&gb, SIZE_MAX));
+}
+
+TEST_CASE("GrowableBuffer C++ wrapper owns and moves allocation", "buffer C++ wrapper")
+{
+    GrowableBuffer buffer;
+
+    TEST_ASSERT_TRUE(buffer.Add("abc", 3));
+    TEST_ASSERT_EQUAL_UINT32(3, buffer.Size());
+
+    GrowableBuffer moved(std::move(buffer));
+    TEST_ASSERT_TRUE(buffer.Empty());
+    TEST_ASSERT_EQUAL_UINT32(3, moved.Size());
+    TEST_ASSERT_EQUAL_UINT8_ARRAY((const uint8_t*)"abc", moved.Data(), moved.Size());
+
+    moved.Reset(false);
+    TEST_ASSERT_TRUE(moved.Empty());
+    TEST_ASSERT_TRUE(moved.Capacity() >= 3);
 }

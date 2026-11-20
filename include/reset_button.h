@@ -14,7 +14,11 @@ extern "C" {
 
 // Configures a GPIO as a reset button and registers its press handler.
 // Only one button can be configured; subsequent calls are ignored.
+#ifdef __cplusplus
 void setupResetButton(gpio_num_t gpioPin, ResetButtonPressedHandler_t handler, void* ctx = nullptr);
+#else
+void setupResetButton(gpio_num_t gpioPin, ResetButtonPressedHandler_t handler, void* ctx);
+#endif // __cplusplus
 
 #ifdef __cplusplus
 }

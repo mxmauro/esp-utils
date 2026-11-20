@@ -1,9 +1,12 @@
 #include <unity.h>
+#include <type_traits>
 #include "lightstd/allocator.h"
 
 using namespace lightstd;
 
 // -----------------------------------------------------------------------------
+
+static_assert(std::has_virtual_destructor_v<IAllocator>);
 
 TEST_CASE("Default allocator allocates and deallocates", "lightstd allocator")
 {

@@ -65,6 +65,7 @@ static void returnWithoutSignalCallback(Task_t task, void* arg);
 static void cooperativeQuitCallback(Task_t task, void* arg);
 static void externalDetachCallback(Task_t task, void* arg);
 static void selfDetachCallback(Task_t task, void* arg);
+static void wrapperCallback(Task_t task, void* arg);
 static void createParameterTask(void* arg);
 static void createReturnWithoutSignalTask(void* arg);
 static void queryTask(void* arg);
@@ -88,6 +89,18 @@ TEST_CASE("Task starts automatically without parameters", "task")
     taskJoin(task);
     task = nullptr;
     TEST_ASSERT_NULL(task);
+}
+
+TEST_CASE("Task C++ wrapper explicitly joins its task", "task C++ wrapper")
+{
+    sMainTask = xTaskGetCurrentTaskHandle();
+    Task task = Task::Create(wrapperCallback, "task_wrapper", kTaskStackSize, nullptr, kTaskPriority, tskNO_AFFINITY);
+
+    TEST_ASSERT_TRUE(static_cast<bool>(task));
+    TEST_ASSERT_NOT_EQUAL_UINT32(0, ulTaskNotifyTake(pdTRUE, kTestTimeout));
+
+    task.Join();
+    TEST_ASSERT_FALSE(static_cast<bool>(task));
 }
 
 TEST_CASE("Task waits for non-null startup parameters", "task")
@@ -196,6 +209,10 @@ TEST_CASE("Task status permits external detach after callback exit under content
         taskDetach(ctx.task);
         ctx.task = nullptr;
         vEventGroupDelete(ctx.sync);
+
+        // FreeRTOS reclaims deleted task stacks from its idle task. Yield before
+        // creating the next iteration so the stress test does not exhaust heap.
+        vTaskDelay(1);
     }
 }
 
@@ -227,6 +244,10 @@ TEST_CASE("Task join safely handles queries that begin concurrently", "task")
         TEST_ASSERT_EQUAL(kRaceQuery1FinishedBit | kRaceQuery2FinishedBit, bits & (kRaceQuery1FinishedBit | kRaceQuery2FinishedBit));
         ctx.task = nullptr;
         vEventGroupDelete(ctx.sync);
+
+        // Let the idle task reclaim the worker and query task stacks before the
+        // next stress-test iteration.
+        vTaskDelay(1);
     }
 }
 
@@ -264,17 +285,26 @@ TEST_CASE("Task can detach itself before deleting its FreeRTOS task", "task")
     ctx.sync = xEventGroupCreateStatic(&ctx.syncStorage);
     TEST_ASSERT_NOT_NULL(ctx.sync);
     ctx.task = taskCreate(selfDetachCallback, "task_self_detach", kTaskStackSize, &ctx, kTaskPriority, tskNO_AFFINITY);
+    TEST_ASSERT_NOT_NULL(ctx.task);
     ctx.task = nullptr;
 
     EventBits_t bits = xEventGroupWaitBits(ctx.sync, kSelfDetachedBit, pdFALSE, pdTRUE, kTestTimeout);
     TEST_ASSERT_NOT_EQUAL(0, bits & kSelfDetachedBit);
     TEST_ASSERT_NULL(ctx.task);
+    vTaskDelay(1);
     vEventGroupDelete(ctx.sync);
 }
 
 // -----------------------------------------------------------------------------
 
 static void nullArgumentCallback(Task_t task, void* arg)
+{
+    UNREFERENCED_PARAMETER(task);
+    UNREFERENCED_PARAMETER(arg);
+    xTaskNotifyGive(sMainTask);
+}
+
+static void wrapperCallback(Task_t task, void* arg)
 {
     UNREFERENCED_PARAMETER(task);
     UNREFERENCED_PARAMETER(arg);

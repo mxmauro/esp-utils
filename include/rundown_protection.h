@@ -2,6 +2,8 @@
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/event_groups.h>
+#include <stdbool.h>
+#include <stddef.h>
 #include <stdatomic.h>
 #include <stdint.h>
 
@@ -15,10 +17,17 @@ typedef struct RundownProtection_s {
     StaticEventGroup_t          eventGroupBuffer;
 } RundownProtection_t;
 
-#define RUNDOWN_PROTECTION_INIT_STATIC                                                                                       \
-    {                                                                                                                        \
-        .counter = ATOMIC_VAR_INIT(0), .waiters = ATOMIC_VAR_INIT(0), .eg = ATOMIC_VAR_INIT(nullptr), .eventGroupBuffer = {} \
-    }
+#ifdef __cplusplus
+    #define RUNDOWN_PROTECTION_INIT_STATIC                                                                                     \
+        {                                                                                                                      \
+            .counter = ATOMIC_VAR_INIT(0), .waiters = ATOMIC_VAR_INIT(0), .eg = ATOMIC_VAR_INIT(NULL), .eventGroupBuffer = {}  \
+        }
+#else
+    #define RUNDOWN_PROTECTION_INIT_STATIC                                                                                     \
+        {                                                                                                                      \
+            .counter = ATOMIC_VAR_INIT(0), .waiters = ATOMIC_VAR_INIT(0), .eg = ATOMIC_VAR_INIT(NULL), .eventGroupBuffer = {0} \
+        }
+#endif // __cplusplus
 
 // -----------------------------------------------------------------------------
 
@@ -46,38 +55,95 @@ void rundownProtWait(RundownProtection_t* rp);
 }
 #endif // __cplusplus
 
+// -----------------------------------------------------------------------------
+
 #ifdef __cplusplus
+
+class RundownProtection
+{
+public:
+    RundownProtection() noexcept
+    {
+        rundownProtInit(&rp);
+    }
+    RundownProtection(const RundownProtection&) noexcept = delete;
+    RundownProtection(RundownProtection&&) noexcept = delete;
+
+    // Starts rundown, waits for holders, and releases the backing event group.
+    ~RundownProtection() noexcept
+    {
+        rundownProtWait(&rp);
+        rundownProtDestroy(&rp);
+    }
+
+    RundownProtection& operator=(const RundownProtection&) noexcept = delete;
+    RundownProtection& operator=(RundownProtection&&) noexcept = delete;
+
+    // Acquires a usage reference unless rundown has already started.
+    bool Acquire() noexcept
+    {
+        return rundownProtAcquire(&rp);
+    }
+
+    // Releases a previously acquired usage reference.
+    void Release() noexcept
+    {
+        rundownProtRelease(&rp);
+    }
+
+    // Starts rundown and waits for all outstanding users to leave.
+    void Wait() noexcept
+    {
+        rundownProtWait(&rp);
+    }
+
+    // Returns the underlying C state without transferring ownership.
+    RundownProtection_t& NativeHandle() noexcept
+    {
+        return rp;
+    }
+
+private:
+    RundownProtection_t rp;
+};
+
+// -----------------------------------------------------------------------------
+
 class AutoRundownProtection
 {
 public:
     // Acquires rundown protection for the lifetime of this guard.
-    AutoRundownProtection(RundownProtection_t& _rp) : rp(_rp)
+    AutoRundownProtection(RundownProtection_t& _rp) noexcept : rp(&_rp), wasAcquired(rundownProtAcquire(rp))
     {
-        wasAcquired = rundownProtAcquire(&rp);
     }
-    AutoRundownProtection(const AutoRundownProtection&) = delete;
-    AutoRundownProtection(AutoRundownProtection&&) = delete;
+    // Acquires rundown protection from its C++ owner for the lifetime of this guard.
+    AutoRundownProtection(RundownProtection& _rp) noexcept : AutoRundownProtection(_rp.NativeHandle())
+    {
+    }
+    AutoRundownProtection(const AutoRundownProtection&) noexcept = delete;
+    AutoRundownProtection(AutoRundownProtection&&) noexcept = delete;
 
     // Releases the acquired protection when the guard goes out of scope.
-    ~AutoRundownProtection()
+    ~AutoRundownProtection() noexcept
     {
         if (wasAcquired)
         {
-            rundownProtRelease(&rp);
+            rundownProtRelease(rp);
         }
     }
 
-    AutoRundownProtection& operator=(const AutoRundownProtection&) = delete;
-    AutoRundownProtection& operator=(AutoRundownProtection&&) = delete;
+    AutoRundownProtection& operator=(const AutoRundownProtection&) noexcept = delete;
+    AutoRundownProtection& operator=(AutoRundownProtection&&) noexcept = delete;
 
     // Reports whether the guard successfully acquired protection.
-    bool acquired() const
+    bool acquired() const noexcept
     {
         return wasAcquired;
-    };
+    }
 
 private:
-    RundownProtection_t& rp;
+    RundownProtection_t* rp;
     bool                 wasAcquired;
 };
+
 #endif // __cplusplus

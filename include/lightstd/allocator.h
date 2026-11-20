@@ -13,6 +13,9 @@ namespace lightstd {
 class IAllocator
 {
 public:
+    // Allows allocator implementations to be destroyed through this interface.
+    virtual ~IAllocator() noexcept = default;
+
     // Returns the process-wide default allocator implementation.
     static IAllocator* getDefault() noexcept;
 

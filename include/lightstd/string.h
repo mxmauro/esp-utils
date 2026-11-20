@@ -26,7 +26,7 @@ public:
         alloc = _alloc ? _alloc : IAllocator::getDefault();
     }
 
-    string(const string&) = delete;
+    string(const string&) noexcept = delete;
     // Transfers ownership of the string buffer.
     string(string&& other) noexcept : ptr(other.ptr), len(other.len), cap(other.cap), alloc(other.alloc)
     {
@@ -36,7 +36,7 @@ public:
     }
 
     // Releases the owned character buffer.
-    ~string()
+    ~string() noexcept
     {
         if (ptr)
         {
@@ -44,7 +44,7 @@ public:
         }
     }
 
-    string& operator=(const string&) = delete;
+    string& operator=(const string&) noexcept = delete;
     string& operator=(string&& other) noexcept
     {
         if (this != &other)

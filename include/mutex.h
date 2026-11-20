@@ -3,6 +3,7 @@
 // Mutex provides a simple mutex wrapper around FreeRTOS semaphores.
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
+#include <stdint.h>
 
 // -----------------------------------------------------------------------------
 
@@ -26,6 +27,10 @@ typedef struct RwMutex_s {
 } RwMutex_t;
 
 // -----------------------------------------------------------------------------
+
+#ifdef __cplusplus
+extern "C" {
+#endif // __cplusplus
 
 // Initializes a C mutex wrapper.
 void mutexInit(Mutex_t* mtx);
@@ -53,40 +58,42 @@ void rwMutexLockWrite(RwMutex_t* rwMtx);
 // Releases exclusive write access.
 void rwMutexUnlockWrite(RwMutex_t* rwMtx);
 
+#ifdef __cplusplus
+}
+#endif // __cplusplus
+
 // -----------------------------------------------------------------------------
 
 #ifdef __cplusplus
-extern "C" {
-#endif // __cplusplus
 
 class Mutex
 {
 public:
     // Initializes the wrapped mutex.
-    Mutex()
+    Mutex() noexcept
     {
         mutexInit(&mtx);
     }
-    Mutex(const Mutex&) = delete;
-    Mutex(Mutex&&) = delete;
+    Mutex(const Mutex&) noexcept = delete;
+    Mutex(Mutex&&) noexcept = delete;
 
     // Destroys the wrapped mutex.
-    ~Mutex()
+    ~Mutex() noexcept
     {
         mutexDeinit(&mtx);
     }
 
-    Mutex& operator=(const Mutex&) = delete;
-    Mutex& operator=(Mutex&&) = delete;
+    Mutex& operator=(const Mutex&) noexcept = delete;
+    Mutex& operator=(Mutex&&) noexcept = delete;
 
     // Acquires exclusive ownership of the mutex.
-    void Lock()
+    void Lock() noexcept
     {
         mutexLock(&mtx);
     }
 
     // Releases exclusive ownership of the mutex.
-    void Unlock()
+    void Unlock() noexcept
     {
         mutexUnlock(&mtx);
     }
@@ -95,46 +102,48 @@ private:
     Mutex_t mtx;
 };
 
+// -----------------------------------------------------------------------------
+
 class RWMutex
 {
 public:
     // Initializes the wrapped readers-writer mutex.
-    RWMutex()
+    RWMutex() noexcept
     {
         rwMutexInit(&rwMtx);
     }
-    RWMutex(const RWMutex&) = delete;
-    RWMutex(RWMutex&&) = delete;
+    RWMutex(const RWMutex&) noexcept = delete;
+    RWMutex(RWMutex&&) noexcept = delete;
 
     // Destroys the wrapped readers-writer mutex.
-    ~RWMutex()
+    ~RWMutex() noexcept
     {
         rwMutexDeinit(&rwMtx);
     }
 
-    RWMutex& operator=(const RWMutex&) = delete;
-    RWMutex& operator=(RWMutex&&) = delete;
+    RWMutex& operator=(const RWMutex&) noexcept = delete;
+    RWMutex& operator=(RWMutex&&) noexcept = delete;
 
     // Acquires shared read access.
-    void LockRead()
+    void LockRead() noexcept
     {
         rwMutexLockRead(&rwMtx);
     }
 
     // Releases shared read access.
-    void UnlockRead()
+    void UnlockRead() noexcept
     {
         rwMutexUnlockRead(&rwMtx);
     }
 
     // Acquires exclusive write access.
-    void LockWrite()
+    void LockWrite() noexcept
     {
         rwMutexLockWrite(&rwMtx);
     }
 
     // Releases exclusive write access.
-    void UnlockWrite()
+    void UnlockWrite() noexcept
     {
         rwMutexUnlockWrite(&rwMtx);
     }
@@ -143,35 +152,39 @@ private:
     RwMutex_t rwMtx;
 };
 
+// -----------------------------------------------------------------------------
+
 class AutoMutex
 {
 public:
     // Locks the mutex for the lifetime of this guard.
-    AutoMutex(Mutex& _mtx) : mtx(_mtx)
+    AutoMutex(Mutex& _mtx) noexcept : mtx(_mtx)
     {
         mtx.Lock();
     }
-    AutoMutex(const AutoMutex&) = delete;
-    AutoMutex(AutoMutex&&) = delete;
+    AutoMutex(const AutoMutex&) noexcept = delete;
+    AutoMutex(AutoMutex&&) noexcept = delete;
 
     // Unlocks the mutex when the guard goes out of scope.
-    ~AutoMutex()
+    ~AutoMutex() noexcept
     {
         mtx.Unlock();
     }
 
-    AutoMutex& operator=(const AutoMutex&) = delete;
-    AutoMutex& operator=(AutoMutex&&) = delete;
+    AutoMutex& operator=(const AutoMutex&) noexcept = delete;
+    AutoMutex& operator=(AutoMutex&&) noexcept = delete;
 
 private:
     Mutex& mtx;
 };
 
+// -----------------------------------------------------------------------------
+
 class AutoRWMutex
 {
 public:
     // Locks the readers-writer mutex in shared or exclusive mode for this scope.
-    AutoRWMutex(RWMutex& _rwMtx, bool _shared) : rwMtx(_rwMtx), shared(_shared)
+    AutoRWMutex(RWMutex& _rwMtx, bool _shared) noexcept : rwMtx(_rwMtx), shared(_shared)
     {
         if (shared)
         {
@@ -182,11 +195,11 @@ public:
             rwMtx.LockWrite();
         }
     }
-    AutoRWMutex(const AutoRWMutex&) = delete;
-    AutoRWMutex(AutoRWMutex&&) = delete;
+    AutoRWMutex(const AutoRWMutex&) noexcept = delete;
+    AutoRWMutex(AutoRWMutex&&) noexcept = delete;
 
     // Unlocks the readers-writer mutex when the guard goes out of scope.
-    ~AutoRWMutex()
+    ~AutoRWMutex() noexcept
     {
         if (shared)
         {
@@ -198,14 +211,12 @@ public:
         }
     }
 
-    AutoRWMutex& operator=(const AutoRWMutex&) = delete;
-    AutoRWMutex& operator=(AutoRWMutex&&) = delete;
+    AutoRWMutex& operator=(const AutoRWMutex&) noexcept = delete;
+    AutoRWMutex& operator=(AutoRWMutex&&) noexcept = delete;
 
 private:
     RWMutex& rwMtx;
     bool     shared;
 };
 
-#ifdef __cplusplus
-}
 #endif // __cplusplus

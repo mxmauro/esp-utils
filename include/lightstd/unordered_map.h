@@ -20,7 +20,7 @@ template <typename K>
 struct static_hash_map_default_hash
 {
     // Hashes the key as a raw byte sequence.
-    uint32_t operator()(const K& key) const
+    uint32_t operator()(const K& key) const noexcept
     {
         return fnv1a32(&key, sizeof(key));
     }
@@ -30,6 +30,9 @@ struct static_hash_map_default_hash
 template <typename K, typename V, typename HashFn = static_hash_map_default_hash<K>>
 class static_hash_map
 {
+    static_assert(std::is_nothrow_invocable_r_v<uint32_t, HashFn&, const K&>,
+                  "static_hash_map requires HashFn(const K&) to return uint32_t without throwing.");
+
 private:
     typedef enum State_e : uint8_t {
         EMPTY = 0,
@@ -520,7 +523,7 @@ private:
         }
     }
 
-    size_t getHash(const K& key)
+    size_t getHash(const K& key) noexcept
     {
         return hasher(key) % tableSize;
     }

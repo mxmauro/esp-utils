@@ -11,7 +11,7 @@ hardware control, data structures, synchronization primitives, and storage manag
 - **Task Management**: Simplified task creation and management.
 - **Storage**: NVS (Non-Volatile Storage) abstraction layer.
 - **Utilities**: Time helpers, FNV hashing, type conversion, and profiling tools.
-- **Modern C++**: Provides lightweight alternatives to standard library components for resource-constrained environments.
+- **C and Modern C++**: Provides C APIs plus lightweight C++ RAII wrappers and standard-library alternatives for resource-constrained environments.
 
 ## Components
 
@@ -39,7 +39,7 @@ Then append the desired component like the following example:
 dependencies:
   mxmauro/esp_utils:
     git: https://github.com/mxmauro/esp-utils.git
-    version: "v0.4.0"   # You can also specify a branch or commit hash
+    version: "v0.5.0"   # You can also specify a branch or commit hash
 ```
 
 Save the changes and run the following command:

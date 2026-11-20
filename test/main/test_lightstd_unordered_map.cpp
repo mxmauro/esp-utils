@@ -7,7 +7,7 @@ using namespace lightstd;
 
 struct ConstantHash
 {
-    uint32_t operator()(const int&) const
+    uint32_t operator()(const int&) const noexcept
     {
         return 1;
     }

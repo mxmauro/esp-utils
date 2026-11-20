@@ -76,6 +76,23 @@ TEST_CASE("RundownProtection wait without references", "wait still marks rundown
     rundownProtDestroy(&rp);
 }
 
+TEST_CASE("RundownProtection C++ wrapper", "acquire/release lifecycle")
+{
+    RundownProtection rp;
+
+    TEST_ASSERT_TRUE(rp.Acquire());
+    rp.Release();
+
+    {
+        AutoRundownProtection guard(rp);
+
+        TEST_ASSERT_TRUE(guard.acquired());
+    }
+
+    rp.Wait();
+    TEST_ASSERT_FALSE(rp.Acquire());
+}
+
 TEST_CASE("RundownProtection destruction waits for concurrent waiters", "concurrent wait and destroy")
 {
     RundownTestContext_t   ctx{};
