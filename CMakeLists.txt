@@ -21,4 +21,4 @@ set(srcs "src/convert.cpp"
 idf_component_register(SRCS "${srcs}"
                        INCLUDE_DIRS "include"
                        REQUIRES esp_driver_gpio nvs_flash
-                       PRIV_REQUIRES esp_timer)
+                       PRIV_REQUIRES esp_timer esp_driver_rmt)

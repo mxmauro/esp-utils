@@ -3,7 +3,6 @@
 #include "fnv.h"
 #include "growable_buffer.h"
 #include "mutex.h"
-#include "onboard_led.h"
 #include "reset_button.h"
 #include "rundown_protection.h"
 #include "run_once.h"
@@ -44,8 +43,6 @@ TEST_CASE("C-facing APIs compile and link from C", "C API")
     int                 taskRan = 0;
     esp_err_t (*nvsInitializer)(void) = nvsInit;
     uint64_t (*clockNow)(void) = now_ms;
-    void (*onboardInitializer)(gpio_num_t) = onboardLedInit;
-    void (*onboardSetter)(bool) = onboardLedSet;
     void (*resetButtonInitializer)(gpio_num_t, ResetButtonPressedHandler_t, void*) = setupResetButton;
 
     TEST_ASSERT_TRUE(gbAdd(&buffer, "x", 1, SIZE_MAX));
@@ -84,8 +81,6 @@ TEST_CASE("C-facing APIs compile and link from C", "C API")
     TEST_ASSERT_EQUAL(1, taskRan);
 
     TEST_ASSERT_NOT_NULL(nvsInitializer);
-    TEST_ASSERT_NOT_NULL(onboardInitializer);
-    TEST_ASSERT_NOT_NULL(onboardSetter);
     TEST_ASSERT_NOT_NULL(resetButtonInitializer);
     TEST_ASSERT_NOT_NULL(clockNow);
 }

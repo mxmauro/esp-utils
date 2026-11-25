@@ -39,7 +39,7 @@ Then append the desired component like the following example:
 dependencies:
   mxmauro/esp_utils:
     git: https://github.com/mxmauro/esp-utils.git
-    version: "v0.5.0"   # You can also specify a branch or commit hash
+    version: "v0.6.0"   # You can also specify a branch or commit hash
 ```
 
 Save the changes and run the following command:
@@ -54,3 +54,17 @@ This will download the components into the `managed_components` directory of you
 
 - ESP-IDF v5.5 or later.
 - Target: ESP32 (Linux simulator not supported)
+
+## Onboard LED
+
+Select the LED type and GPIO under **Onboard LED Configuration** in menuconfig.
+GPIO LEDs support active-high and active-low wiring. WS2812 LEDs use the RMT
+peripheral and support selectable channel order (RGB by default); no external
+LED component is required. With no LED selected, the functions do nothing.
+
+Call `onboardLedInit()` once before using `onboardLedSet(bool)`. For WS2812,
+on and off mean blue and black respectively, and `onboardLedSetRGB(r, g, b)`
+sets an arbitrary 8-bit color. Setters serialize calls from FreeRTOS tasks and
+must not be called from an interrupt. Initialization and hardware errors use
+ESP-IDF's fatal error handling. The initializer no longer accepts a GPIO
+argument; existing applications must move that setting to menuconfig.

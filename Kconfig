@@ -1,0 +1,51 @@
+menu "Onboard LED Configuration"
+
+    choice BOARD_LED_TYPE
+        prompt "Onboard LED type"
+        default BOARD_LED_TYPE_NONE
+
+        config BOARD_LED_TYPE_NONE
+            bool "No onboard LED"
+
+        config BOARD_LED_TYPE_GPIO
+            bool "Standard GPIO LED"
+
+        config BOARD_LED_TYPE_WS2812
+            bool "WS2812 addressable RGB LED"
+            depends on SOC_RMT_SUPPORTED
+    endchoice
+
+    config BOARD_LED_GPIO
+        int "Onboard LED GPIO"
+        depends on !BOARD_LED_TYPE_NONE
+        default -1
+
+    config BOARD_LED_ACTIVE_LOW
+        bool "Onboard LED active low"
+        depends on BOARD_LED_TYPE_GPIO
+        default n
+
+    choice BOARD_LED_CHANNEL_MAP
+        prompt "WS2812 channel order"
+        depends on BOARD_LED_TYPE_WS2812
+        default BOARD_LED_CHANNEL_MAP_RGB
+
+        config BOARD_LED_CHANNEL_MAP_RGB
+            bool "RGB"
+
+        config BOARD_LED_CHANNEL_MAP_RBG
+            bool "RBG"
+
+        config BOARD_LED_CHANNEL_MAP_GRB
+            bool "GRB"
+
+        config BOARD_LED_CHANNEL_MAP_GBR
+            bool "GBR"
+
+        config BOARD_LED_CHANNEL_MAP_BRG
+            bool "BRG"
+
+        config BOARD_LED_CHANNEL_MAP_BGR
+            bool "BGR"
+    endchoice
+endmenu
