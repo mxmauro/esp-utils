@@ -9,4 +9,5 @@ managed_components
 __pycache__
 sdkconfig*
 !sdkconfig.defaults
+!sdkconfig.defaults.esp32*
 dependencies.lock
